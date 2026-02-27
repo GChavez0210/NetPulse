@@ -1,7 +1,7 @@
 {
   "name": "netpulse",
   "version": "0.1.1",
-  "description": "Desktop app for basic network troubleshooting with Electron + React + Vite",
+  "description": "NetPulse desktop app. Fast, focused network troubleshooting with Electron + React + Vite.",
   "main": "electron/main.js",
   "author": "",
   "license": "MIT",

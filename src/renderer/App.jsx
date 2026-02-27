@@ -1035,9 +1035,9 @@ function App() {
       <section className="hero-panel">
         <div className="brand-wrap">
           <h1>
-            NetPulse <span className="version-badge">v2.4</span>
+            NetPulse <span className="version-badge">v0.1.1</span>
           </h1>
-          <p className="subtitle">Network diagnostics and live performance monitoring</p>
+          <p className="subtitle">Fast, focused network troubleshooting.</p>
         </div>
         <div className="tabs-bar">
           {TABS.map((tab) => (

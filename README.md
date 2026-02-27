@@ -1,101 +1,105 @@
-# NetPulse (Electron + React + Vite)
+# NetPulse v0.1.1 (Electron + React + Vite)
 
-A self-contained desktop app for network diagnostics and live performance monitoring.
-Includes Apilayer WHOIS integration with local API key settings.
+Fast, focused network troubleshooting.
+
+## Overview
+
+NetPulse is a desktop diagnostics suite with real-time monitoring and utility modules:
+
+- Multi-target ping dashboard with live sparkline charts
+- Packet loss test with streaming sequence map and diagnostic log
+- Traceroute with parsed hop analysis and export/share
+- Dedicated diagnostics hub:
+  - TCP ping (SYN/connect reachability)
+  - MTR-style multi-round hop analysis
+  - DNS toolkit (local vs Google resolver)
+  - Port scanner lite
+- WHOIS lookup via Apilayer with local API key storage
+- Dark/Light mode toggle
 
 ## Requirements
 
 - Node.js 18+
 - npm
-- Visual Studio Code (recommended)
 
-## Project Structure
+## Run
 
-- `electron/main.js`: Electron main process (window lifecycle, IPC, ping, traceroute, local settings)
-- `electron/preload.js`: Secure `contextBridge` API for renderer access
-- `src/renderer/App.jsx`: Main React UI (parallel ping sessions, live charts, alerts, traceroute)
-- `src/renderer/main.jsx`: React entrypoint
-- `src/renderer/styles.css`: Dark neumorphic and glass-style UI theme
-- `vite.config.js`: Vite configuration
-- `index.html`: Renderer HTML entry
-
-## Install
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-## Development
+Development mode:
 
 ```bash
 npm run dev
 ```
 
-This starts:
-- Vite dev server at `http://localhost:5173`
-- Electron pointing to the Vite server
-
-## Build and Package
+## Build
 
 ```bash
 npm run build
 ```
 
-Expected output:
-- `dist/` for web assets
-- `release/` for packaged desktop installers
+Build output:
 
-## Implemented IPC Channels
+- `dist/` renderer assets
+- `release/` packaged desktop artifacts
 
-- `ping:run`: Runs a standard ping from the main process
-- `ping:sample`: Runs a single ping sample (supports packet size + DF options)
-- `ping:rapid`: Runs rapid packet-loss tests (100 / 1000) with optional live stream updates
-- `trace:run`: Runs traceroute (`tracert` on Windows)
-- `tcp:ping`: TCP SYN-style reachability check on configurable port
-- `mtr:run`: Multi-round traceroute analysis (MTR-style summary)
-- `dns:query`: DNS toolkit query (A/AAAA/MX/NS/CNAME/PTR) against local + Google resolvers
-- `portscan:run`: Lightweight TCP port scan for selected ports
-- `whois:lookup`: Runs WHOIS queries through Apilayer from the Electron main process
-- `settings:setApiKey`: Saves the WHOIS API key in local app settings
-- `settings:getApiKey`: Reads the saved WHOIS API key
+Windows packaging is configured for both:
 
-## UI Features
+- `x64`
+- `arm64`
 
-- Modern dark theme with neumorphic surfaces and glass-style chart panels
-- Parallel extended ping sessions (multiple targets at the same time)
-- Fixed 1-second sampling cadence per active session
-- Per-session and global controls: start, pause, stop, remove, rate-limited active sessions
-- Status change notifications:
-  - Host down after 3 consecutive failed pings
-  - Host recovered when responses resume
-- Timeline event markers on ping charts (down/up transitions)
-- Health-based chart colors:
-  - Green: normal
-  - Yellow: degraded/lost pings
-  - Red: down
-- Advanced latency stats: p50, p95, p99, stddev
-- Multi-target latency matrix (avg/loss/jitter/status)
-- TCP ping module (open/closed/filtered + RTT)
-- MTR-style hop analysis with problematic hop detection
-- DNS toolkit with local vs 8.8.8.8 resolver comparison
-- Port scanner lite for small port lists
-- Traceroute module
-- WHOIS lookup module powered by `https://api.apilayer.com/whois/query`
-- Local WHOIS API key input and persistence
+The official app/installer icon is `netpulse_icon.ico`.
+
+## Main Tabs
+
+- `Ping Tests`
+  - Single-IP or Bulk-IP entry mode toggle
+  - Session rate limiting and duplicate target protection
+  - Packet size and DF controls
+  - p50/p95/p99/stddev metrics
+  - timeline markers for down/recovery transitions
+  - multi-target latency matrix
+- `Packet Loss Check`
+  - live sequence grid (success/jitter/failed)
+  - loss donut + metrics stack
+  - streaming diagnostic log
+- `Traceroute`
+  - hop cards, status bars, summary stats
+  - rerun/export/share actions
+- `Diagnostics`
+  - dedicated diagnostics target input (separate from Ping tab)
+  - TCP ping, MTR-style, DNS toolkit, port scan
+- `WHOIS Lookup`
+  - structured terminal-style result
+  - copy/export actions
+- `Settings`
+  - local WHOIS API key persistence
+
+## IPC Channels
+
+- `ping:run`
+- `ping:sample`
+- `ping:rapid`
+- `trace:run`
+- `tcp:ping`
+- `mtr:run`
+- `dns:query`
+- `portscan:run`
+- `whois:lookup`
+- `settings:setApiKey`
+- `settings:getApiKey`
 
 ## Security Notes
 
 - `contextIsolation: true`
 - `nodeIntegration: false`
-- Host validation before ping/traceroute execution
-- Uses Electron `safeStorage` when available for API key encryption
+- Host validation before command execution
+- Uses Electron `safeStorage` for API key encryption when available
 
-## Windows ARM64 Note (`esbuild`)
+## License
 
-If you encounter `EFTYPE` during install (`esbuild.exe is not a valid application for this OS platform`), this project pins `esbuild@0.19.12` to avoid that issue.
-
-Use a clean reinstall when needed:
-
-```bash
-npm run clean:install
-```
+MIT. See [LICENSE](LICENSE).
