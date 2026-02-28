@@ -1,6 +1,6 @@
 {
   "name": "netpulse",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "NetPulse desktop app. Fast, focused network troubleshooting with Electron + React + Vite.",
   "main": "electron/main.js",
   "author": "",
@@ -54,7 +54,8 @@
     "nsis": {
       "installerIcon": "netpulse_icon.ico",
       "uninstallerIcon": "netpulse_icon.ico",
-      "installerHeaderIcon": "netpulse_icon.ico"
+      "installerHeaderIcon": "netpulse_icon.ico",
+      "deleteAppDataOnUninstall": true
     },
     "mac": {
       "target": [

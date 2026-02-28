@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import netPulseLogo from '../../NetPulse-logo.png';
 
 const MAX_POINTS = 60;
 const DOWN_THRESHOLD = 3;
@@ -18,14 +19,6 @@ const TABS = [
   { id: 'whois', label: 'WHOIS Lookup' },
   { id: 'settings', label: 'Settings' }
 ];
-const TAB_ICONS = {
-  ping: '⚡',
-  packetloss: '◉',
-  trace: '⌁',
-  diagnostics: '🧰',
-  whois: '⌕',
-  settings: '⚙'
-};
 
 function getHealth(test) {
   if (test.reachable === false) return HEALTH.DOWN;
@@ -228,62 +221,10 @@ function buildWhoisPresentation(data, domain) {
   return { lines, text, queryDomain };
 }
 
-function parseRapidPingOutput(output, expectedCount) {
-  const lines = String(output || '')
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const packetStates = [];
-  const logLines = [];
-  let jitterCount = 0;
-  let latencySamples = [];
-
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (/(reply from|bytes from|icmp_seq=)/i.test(line)) {
-      const match = line.match(/time[=<]?\s*(\d+(?:\.\d+)?)\s*ms/i);
-      const latency = match ? Number.parseFloat(match[1]) : null;
-      if (latency != null) latencySamples.push(latency);
-      if (latency != null && latency > 80) {
-        packetStates.push('jitter');
-        jitterCount += 1;
-        logLines.push({ type: 'jitter', text: line });
-      } else {
-        packetStates.push('success');
-        logLines.push({ type: 'success', text: line });
-      }
-      continue;
-    }
-
-    if (
-      /(timed out|request timeout|destination host unreachable|general failure|100% packet loss|packet loss 100)/i.test(
-        lower
-      )
-    ) {
-      packetStates.push('failed');
-      logLines.push({ type: 'failed', text: line });
-      continue;
-    }
-
-    if (/(ping statistics|packets:|transmitted|received|lost|minimum|maximum|average)/i.test(lower)) {
-      logLines.push({ type: 'meta', text: line });
-    }
-  }
-
-  const filled = [...packetStates];
-  while (filled.length < expectedCount) filled.push('pending');
-
-  const validLatencies = latencySamples.filter((v) => Number.isFinite(v));
-  const avgLatency =
-    validLatencies.length > 0 ? validLatencies.reduce((a, b) => a + b, 0) / validLatencies.length : null;
-
-  return {
-    packetStates: filled.slice(0, expectedCount),
-    logLines,
-    jitterCount,
-    avgLatency
-  };
+function getFloodPacketState(sample) {
+  if (!sample || sample.timeout) return 'failed';
+  if (sample.rtt_ms != null && sample.rtt_ms > 80) return 'jitter';
+  return 'success';
 }
 
 function LineChart({ points, health, liveLabel, events = [] }) {
@@ -312,7 +253,7 @@ function LineChart({ points, health, liveLabel, events = [] }) {
 
   const plotted = useMemo(() => markers.map((m) => `${m.x},${m.y}`).join(' '), [markers]);
   const lastMarker = markers.length > 0 ? markers[markers.length - 1] : null;
-  const latestLabelX = lastMarker ? Math.max(lastMarker.x - 10, padding + 52) : 0;
+  const latestLabelX = lastMarker ? Math.max(lastMarker.x - 20, padding + 88) : 0;
   const yTicks = 5;
   const grid = Array.from({ length: yTicks + 1 }, (_, i) => {
     const ratio = i / yTicks;
@@ -397,10 +338,9 @@ function createTest(host) {
 
 function App() {
   const [activeTab, setActiveTab] = useState('ping');
-  const [theme, setTheme] = useState('dark');
-  const [hostInput, setHostInput] = useState('8.8.8.8');
+  const [hostInput, setHostInput] = useState('');
   const [pingEntryMode, setPingEntryMode] = useState('single');
-  const [diagnosticsHostInput, setDiagnosticsHostInput] = useState('8.8.8.8');
+  const [diagnosticsHostInput, setDiagnosticsHostInput] = useState('');
   const [bulkHostsInput, setBulkHostsInput] = useState('');
   const [whoisInput, setWhoisInput] = useState('google.com');
   const [tests, setTests] = useState([]);
@@ -408,12 +348,19 @@ function App() {
   const [rapidRunning, setRapidRunning] = useState(false);
   const [rapidDetails, setRapidDetails] = useState({
     host: '',
+    mode: 'ICMP',
     sent: 0,
     received: 0,
     lost: 0,
     lossPct: 0,
     jitterCount: 0,
     avgLatency: null,
+    minRtt: null,
+    maxRtt: null,
+    p95Rtt: null,
+    jitterMs: null,
+    lossStreakMax: 0,
+    status: 'idle',
     packetStates: [],
     logLines: [{ type: 'meta', text: '[init] Ready for packet loss diagnostics.' }]
   });
@@ -442,8 +389,8 @@ function App() {
   const timersRef = useRef(new Map());
   const inFlightRef = useRef(new Set());
   const testsRef = useRef(tests);
-  const rapidJobRef = useRef(null);
   const whoisPresentation = useMemo(() => buildWhoisPresentation(whoisData, whoisInput.trim()), [whoisData, whoisInput]);
+  const hasWhoisApiKey = apiKey.trim().length > 0;
 
   useEffect(() => {
     testsRef.current = tests;
@@ -465,54 +412,89 @@ function App() {
       }
       timersRef.current.clear();
       inFlightRef.current.clear();
+      window.networkAPI.cancelFloodPing().catch(() => {});
     };
   }, []);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem('netpulse-theme');
-    if (saved === 'light' || saved === 'dark') {
-      setTheme(saved);
-    }
-  }, []);
+    const unsubscribeSample = window.networkAPI.onFloodPingSample((sample) => {
+      if (!sample || typeof sample.seq !== 'number') return;
+      setRapidDetails((prev) => {
+        const nextStates = [...prev.packetStates];
+        const index = sample.seq - 1;
+        if (index >= 0 && index < nextStates.length) {
+          nextStates[index] = getFloodPacketState(sample);
+        }
 
-  useEffect(() => {
-    document.body.classList.remove('theme-dark', 'theme-light');
-    document.body.classList.add(theme === 'light' ? 'theme-light' : 'theme-dark');
-    window.localStorage.setItem('netpulse-theme', theme);
-  }, [theme]);
+        const received = nextStates.filter((state) => state !== 'failed' && state !== 'pending').length;
+        const sent = nextStates.filter((state) => state !== 'pending').length;
+        const lost = Math.max(sent - received, 0);
+        const lossPct = sent > 0 ? Number(((lost * 100) / sent).toFixed(2)) : 0;
+        const jitterCount = nextStates.filter((state) => state === 'jitter').length;
+        const logType = sample.timeout ? 'failed' : sample.rtt_ms > 80 ? 'jitter' : 'success';
+        const logText = sample.timeout
+          ? `[${sample.timestamp}] seq=${sample.seq} timeout`
+          : `[${sample.timestamp}] seq=${sample.seq} rtt=${sample.rtt_ms}ms`;
 
-  useEffect(() => {
-    const unsubscribe = window.networkAPI.onRapidPingUpdate((payload) => {
-      if (!payload || payload.jobId !== rapidJobRef.current) return;
-
-      if (payload.type === 'packet') {
-        setRapidDetails((prev) => {
-          const nextStates = [...prev.packetStates];
-          if (payload.index >= 0 && payload.index < nextStates.length) {
-            nextStates[payload.index] = payload.state;
-          }
-
-          const lineType = payload.state === 'failed' ? 'failed' : payload.state === 'jitter' ? 'jitter' : 'success';
-          const nextLogs = [...prev.logLines, { type: lineType, text: payload.text }].slice(-500);
-          const jitterCount = nextStates.filter((s) => s === 'jitter').length;
-
-          return {
-            ...prev,
-            packetStates: nextStates,
-            jitterCount,
-            logLines: nextLogs
-          };
-        });
-      } else if (payload.type === 'meta') {
-        setRapidDetails((prev) => ({
+        return {
           ...prev,
-          logLines: [...prev.logLines, { type: 'meta', text: payload.text }].slice(-500)
-        }));
+          sent,
+          received,
+          lost,
+          lossPct,
+          jitterCount,
+          packetStates: nextStates,
+          logLines: [...prev.logLines, { type: logType, text: logText }].slice(-700)
+        };
+      });
+    });
+
+    const unsubscribeDone = window.networkAPI.onFloodPingDone((payload) => {
+      const summary = payload?.summary;
+      if (!summary) return;
+      setRapidDetails((prev) => ({
+        ...prev,
+        sent: summary.sent ?? prev.sent,
+        received: summary.received ?? prev.received,
+        lost: Math.max((summary.sent ?? prev.sent) - (summary.received ?? prev.received), 0),
+        lossPct: summary.loss_pct ?? prev.lossPct,
+        avgLatency: summary.avg_rtt_ms ?? null,
+        minRtt: summary.min_rtt_ms ?? null,
+        maxRtt: summary.max_rtt_ms ?? null,
+        p95Rtt: summary.p95_rtt_ms ?? null,
+        jitterMs: summary.jitter_ms ?? null,
+        lossStreakMax: summary.lossStreakMax ?? 0,
+        status: summary.status || 'done',
+        logLines: [
+          ...prev.logLines,
+          {
+            type: 'meta',
+            text: `[${new Date().toISOString()}] Flood ${summary.status || 'done'}: sent=${summary.sent}, recv=${summary.received}, loss=${summary.loss_pct}%`
+          }
+        ].slice(-700)
+      }));
+      setRapidRunning(false);
+    });
+
+    const unsubscribeStatus = window.networkAPI.onFloodPingStatus((payload) => {
+      if (!payload) return;
+      if (payload.message) setStatus(payload.message);
+      if (payload.status === 'error' || payload.status === 'done' || payload.status === 'cancelled') {
+        setRapidRunning(false);
       }
+      setRapidDetails((prev) => ({
+        ...prev,
+        status: payload.status || prev.status,
+        logLines: payload.message
+          ? [...prev.logLines, { type: payload.status === 'error' ? 'failed' : 'meta', text: payload.message }].slice(-700)
+          : prev.logLines
+      }));
     });
 
     return () => {
-      if (typeof unsubscribe === 'function') unsubscribe();
+      if (typeof unsubscribeSample === 'function') unsubscribeSample();
+      if (typeof unsubscribeDone === 'function') unsubscribeDone();
+      if (typeof unsubscribeStatus === 'function') unsubscribeStatus();
     };
   }, []);
 
@@ -723,6 +705,11 @@ function App() {
   };
 
   const startAll = () => {
+    if (pingEntryMode === 'bulk' && bulkHostsInput.trim()) {
+      addBulkTests();
+      return;
+    }
+
     let started = 0;
     const running = testsRef.current.filter((t) => t.phase === 'running').length;
     const slots = Math.max(MAX_ACTIVE_SESSIONS - running, 0);
@@ -754,78 +741,90 @@ function App() {
     setNotifications([]);
   };
 
+  const runOnEnter = (event, action) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    action();
+  };
+
   const handleRapidPing = async () => {
     const host = hostInput.trim();
     if (!host) {
-      setStatus('Enter a host for rapid ping test.');
+      setStatus('Enter a host for flood packet loss test.');
       return;
     }
 
     const count = Number.parseInt(String(rapidCount), 10);
     if (count !== 100 && count !== 1000) {
-      setStatus('Rapid ping count must be 100 or 1000.');
+      setStatus('Flood test count must be 100 or 1000.');
       return;
     }
 
     setRapidRunning(true);
-    const jobId = `rapid-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    rapidJobRef.current = jobId;
-    setRapidDetails((prev) => ({
-      ...prev,
+    setRapidDetails({
       host,
+      mode: 'ICMP',
       packetStates: Array.from({ length: count }, () => 'pending'),
-      logLines: [{ type: 'meta', text: `[${new Date().toLocaleTimeString('en-US')}] Initializing test sequence for target ${host}...` }]
-    }));
-    setStatus(`Running rapid ping (${count}) for ${host}...`);
+      sent: 0,
+      received: 0,
+      lost: 0,
+      lossPct: 0,
+      jitterCount: 0,
+      avgLatency: null,
+      minRtt: null,
+      maxRtt: null,
+      p95Rtt: null,
+      jitterMs: null,
+      lossStreakMax: 0,
+      status: 'running',
+      logLines: [{ type: 'meta', text: `[${new Date().toISOString()}] Starting fixed-count flood test for ${host}.` }]
+    });
+    setStatus(`Running fixed-count flood test (${count}) for ${host}...`);
+
     try {
-      const result = await window.networkAPI.runRapidPing(host, count, jobId);
-      const parsed = parseRapidPingOutput(result.output || '', count);
-      const sent = result.report?.sent ?? count;
-      const received = result.report?.received ?? parsed.packetStates.filter((s) => s !== 'failed' && s !== 'pending').length;
-      const lost = result.report?.lost ?? Math.max(sent - received, 0);
-      const lossPct =
-        typeof result.report?.lossPct === 'number' ? result.report.lossPct : sent > 0 ? Number(((lost * 100) / sent).toFixed(2)) : 0;
-
-      setRapidDetails((prev) => {
-        const mergedPacketStates =
-          prev.packetStates.length === count && prev.packetStates.some((s) => s !== 'pending')
-            ? prev.packetStates
-            : parsed.packetStates;
-        const mergedLogs =
-          parsed.logLines.length > 0
-            ? [...prev.logLines, ...parsed.logLines].slice(-500)
-            : [...prev.logLines, { type: 'meta', text: result.output || 'No diagnostic output.' }].slice(-500);
-
-        return {
-          host,
-          sent,
-          received,
-          lost,
-          lossPct,
-          jitterCount: parsed.jitterCount,
-          avgLatency: parsed.avgLatency,
-          packetStates: mergedPacketStates,
-          logLines: mergedLogs
-        };
+      const startResult = await window.networkAPI.startFloodPing({
+        target: host,
+        count,
+        mode: 'ICMP',
+        timeoutMs: 1000
       });
 
-      if (result.report) {
-        setStatus(result.ok ? 'Packet loss check completed.' : 'Packet loss check completed with errors.');
+      if (!startResult?.ok) {
+        setRapidRunning(false);
+        setStatus(startResult?.error || 'Flood test could not start.');
+        setRapidDetails((prev) => ({
+          ...prev,
+          status: 'error',
+          logLines: [...prev.logLines, { type: 'failed', text: startResult?.error || 'Flood test start failed.' }]
+        }));
       }
     } catch (error) {
+      setRapidRunning(false);
       setRapidDetails((prev) => ({
         ...prev,
-        logLines: [...prev.logLines, { type: 'failed', text: String(error?.message || error || 'Packet loss check failed.') }]
+        status: 'error',
+        logLines: [...prev.logLines, { type: 'failed', text: String(error?.message || error || 'Flood test failed.') }]
       }));
-      setStatus('Packet loss check failed.');
-    } finally {
-      setRapidRunning(false);
-      rapidJobRef.current = null;
+      setStatus('Flood test failed.');
+    }
+  };
+
+  const handleRapidCancel = async () => {
+    if (!rapidRunning) return;
+    try {
+      const response = await window.networkAPI.cancelFloodPing();
+      if (!response?.ok && response?.error) {
+        setStatus(response.error);
+      } else {
+        setStatus('Cancelling flood test...');
+      }
+    } catch (error) {
+      setStatus(String(error?.message || error || 'Flood cancel failed.'));
     }
   };
 
   const handleTraceroute = async () => {
-    const host = hostInput.trim();
+    const host = traceHost.trim();
     if (!host) {
       setStatus('Enter a host to run traceroute.');
       return;
@@ -851,59 +850,61 @@ function App() {
     }
   };
 
-  const handleExportTraceJson = () => {
+  const handleExportTraceCsv = () => {
     if (traceHops.length === 0) {
       setStatus('Run traceroute first before exporting.');
       return;
     }
 
     const payload = {
-      host: traceHost || hostInput.trim(),
+      host: traceHost.trim(),
       createdAt: new Date().toISOString(),
-      summary: traceSummary,
-      hops: traceHops
+      summary: traceSummary
     };
+    const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const rows = [
+      [
+        'targetHost',
+        'createdAt',
+        'totalHops',
+        'avgRttMs',
+        'hop',
+        'hostname',
+        'ip',
+        'status',
+        'avgLatencyMs',
+        'timedOut',
+        'latenciesMs'
+      ].join(',')
+    ];
+    traceHops.forEach((hop) => {
+      rows.push(
+        [
+          escapeCsv(payload.host || ''),
+          escapeCsv(payload.createdAt),
+          escapeCsv(payload.summary.totalHops),
+          escapeCsv(payload.summary.avgRtt != null ? payload.summary.avgRtt.toFixed(2) : ''),
+          escapeCsv(hop.hop),
+          escapeCsv(hop.hostname),
+          escapeCsv(hop.ip),
+          escapeCsv(hop.status),
+          escapeCsv(hop.avgLatency != null ? hop.avgLatency.toFixed(2) : ''),
+          escapeCsv(Boolean(hop.timedOut)),
+          escapeCsv((hop.latencies || []).join('|'))
+        ].join(',')
+      );
+    });
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `traceroute-${payload.host || 'report'}-${Date.now()}.json`;
+    a.download = `traceroute-${payload.host || 'report'}-${Date.now()}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    setStatus('Traceroute JSON exported.');
-  };
-
-  const handleShareTraceReport = async () => {
-    if (traceHops.length === 0) {
-      setStatus('Run traceroute first before sharing.');
-      return;
-    }
-
-    const summaryLine = `Traceroute ${traceHost || hostInput.trim()} • hops: ${traceSummary.totalHops} • avg RTT: ${
-      traceSummary.avgRtt != null ? `${traceSummary.avgRtt.toFixed(1)} ms` : 'n/a'
-    }`;
-    const topHops = traceHops
-      .slice(0, 10)
-      .map((hop) => `#${hop.hop} ${hop.hostname} ${hop.ip} ${hop.avgLatency != null ? `${hop.avgLatency.toFixed(1)}ms` : 'timeout'}`)
-      .join('\n');
-    const text = `${summaryLine}\n${topHops}`;
-
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: 'NetPulse Traceroute Report',
-          text
-        });
-      } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      }
-      setStatus('Traceroute report shared/copied.');
-    } catch {
-      setStatus('Could not share traceroute report.');
-    }
+    setStatus('Traceroute CSV exported.');
   };
 
   const handleTcpPing = async () => {
@@ -979,6 +980,10 @@ function App() {
       setStatus('Enter a domain for WHOIS lookup.');
       return;
     }
+    if (!hasWhoisApiKey) {
+      setStatus('WHOIS API key is required. Add it in Settings.');
+      return;
+    }
 
     setWhoisLoading(true);
     setStatus(`Running WHOIS lookup for ${domain}...`);
@@ -1032,11 +1037,13 @@ function App() {
 
   return (
     <main className="app-shell">
+      <div className="app-container">
       <section className="hero-panel">
         <div className="brand-wrap">
-          <h1>
-            NetPulse <span className="version-badge">v0.1.1</span>
-          </h1>
+          <div className="brand-logo-row">
+            <img className="brand-logo" src={netPulseLogo} alt="NetPulse" />
+            <span className="version-badge">v0.1.2</span>
+          </div>
           <p className="subtitle">Fast, focused network troubleshooting.</p>
         </div>
         <div className="tabs-bar">
@@ -1046,15 +1053,9 @@ function App() {
               className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
             >
-              <span className="tab-icon" aria-hidden="true">
-                {TAB_ICONS[tab.id]}
-              </span>
               <span>{tab.label}</span>
             </button>
           ))}
-          <button className="theme-toggle" onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}>
-            {theme === 'dark' ? '☀ Light Mode' : '🌙 Dark Mode'}
-          </button>
         </div>
       </section>
 
@@ -1083,18 +1084,12 @@ function App() {
                     id="host"
                     value={hostInput}
                     onChange={(e) => setHostInput(e.target.value)}
-                    placeholder="Add target host or IP"
+                    onKeyDown={(e) => runOnEnter(e, addTest)}
+                    placeholder="Enter a hostname"
                   />
                   <button onClick={addTest}>Add Target</button>
                 </>
-              ) : (
-                <button className="secondary" onClick={addBulkTests}>
-                  Add Bulk Targets
-                </button>
-              )}
-              <span className="system-chip">
-                {tests.some((t) => getHealth(t) === HEALTH.DOWN) ? 'SYSTEM DEGRADED' : 'SYSTEM STABLE'}
-              </span>
+              ) : null}
             </div>
           </section>
 
@@ -1106,8 +1101,9 @@ function App() {
                   id="bulkHosts"
                   value={bulkHostsInput}
                   onChange={(e) => setBulkHostsInput(e.target.value)}
-                  placeholder={'192.168.1.1\n8.8.8.8\nweb-server.local'}
+                  placeholder={'Enter a hostname\nexample.com\nweb-server.local'}
                 />
+                <p className="empty">Bulk mode: paste targets here, then click Start All to add and run them.</p>
               </>
             ) : (
               <p className="empty">Single IP mode enabled. Switch to Bulk IPs to paste multiple targets.</p>
@@ -1144,7 +1140,7 @@ function App() {
             </div>
           </section>
 
-          <section className="tests-grid monitor-grid">
+          <section className="tests-grid monitor-grid ping-grid">
             {tests.length === 0 ? <p className="empty">No active monitors. Add a target to begin.</p> : null}
             {tests.map((test) => {
               const health = getHealth(test);
@@ -1153,7 +1149,7 @@ function App() {
               const liveLabel = health === HEALTH.DOWN ? 'OFFLINE' : health === HEALTH.DEGRADED ? 'UNSTABLE' : 'LIVE';
 
               return (
-                <article key={test.id} className={`test-card monitor-card health-${health}`}>
+                <article key={test.id} className={`test-card monitor-card ping-card health-${health}`}>
                   <div className="test-head">
                     <div>
                       <div className="target-title">
@@ -1171,7 +1167,7 @@ function App() {
                     <pre>{test.lastOutput}</pre>
                   )}
 
-                  <div className="metric-row">
+                  <div className="metric-row stats-grid">
                     <article className="metric-box">
                       <span>Current</span>
                       <strong>{m.current != null ? `${m.current.toFixed(0)}ms` : '--'}</strong>
@@ -1185,7 +1181,7 @@ function App() {
                       <strong>{m.max != null ? `${m.max.toFixed(0)}ms` : '--'}</strong>
                     </article>
                   </div>
-                  <div className="metric-row metric-row-secondary">
+                  <div className="metric-row metric-row-secondary stats-grid">
                     <article className="metric-box">
                       <span>p50</span>
                       <strong>{m.p50 != null ? `${m.p50.toFixed(0)}ms` : '--'}</strong>
@@ -1289,7 +1285,7 @@ function App() {
       ) : null}
 
       {activeTab === 'trace' ? (
-        <section className="card">
+        <section className="card trace-panel">
           <div className="panel-head">
             <h2>Traceroute</h2>
             <div className="run-state">
@@ -1300,9 +1296,10 @@ function App() {
           <label htmlFor="traceHost">Target Host / IP</label>
           <input
             id="traceHost"
-            value={hostInput}
-            onChange={(e) => setHostInput(e.target.value)}
-            placeholder="Example: 8.8.8.8 or cloudflare.com"
+            value={traceHost}
+            onChange={(e) => setTraceHost(e.target.value)}
+            onKeyDown={(e) => runOnEnter(e, handleTraceroute)}
+            placeholder="Enter a hostname"
           />
           <button onClick={handleTraceroute} disabled={traceLoading}>
             {traceLoading ? 'Running traceroute...' : 'Run traceroute'}
@@ -1311,11 +1308,8 @@ function App() {
             <button className="secondary" onClick={handleTraceroute} disabled={traceLoading}>
               Rerun
             </button>
-            <button className="secondary" onClick={handleExportTraceJson} disabled={traceHops.length === 0}>
-              Export JSON
-            </button>
-            <button className="secondary" onClick={handleShareTraceReport} disabled={traceHops.length === 0}>
-              Share Report
+            <button className="secondary" onClick={handleExportTraceCsv} disabled={traceHops.length === 0}>
+              Export CSV
             </button>
           </div>
 
@@ -1368,7 +1362,8 @@ function App() {
               id="packetLossHost"
               value={hostInput}
               onChange={(e) => setHostInput(e.target.value)}
-              placeholder="Target host or IP"
+              onKeyDown={(e) => runOnEnter(e, handleRapidPing)}
+              placeholder="Enter a hostname"
             />
             <div className="count-toggle">
               <button className={rapidCount === 100 ? 'active' : ''} onClick={() => setRapidCount(100)}>
@@ -1380,6 +1375,9 @@ function App() {
             </div>
             <button className="packetloss-start" onClick={handleRapidPing} disabled={rapidRunning}>
               ▶ {rapidRunning ? 'RUNNING TEST...' : 'START TEST'}
+            </button>
+            <button className="secondary" onClick={handleRapidCancel} disabled={!rapidRunning}>
+              Cancel
             </button>
           </section>
 
@@ -1407,6 +1405,24 @@ function App() {
               </article>
               <article className="diag-metric">
                 Lost <strong>{rapidDetails.lost}</strong>
+              </article>
+              <article className="diag-metric">
+                Avg RTT <strong>{rapidDetails.avgLatency != null ? `${rapidDetails.avgLatency} ms` : 'n/a'}</strong>
+              </article>
+              <article className="diag-metric">
+                Min/Max RTT{' '}
+                <strong>
+                  {rapidDetails.minRtt != null ? `${rapidDetails.minRtt} / ${rapidDetails.maxRtt} ms` : 'n/a'}
+                </strong>
+              </article>
+              <article className="diag-metric">
+                Jitter / P95{' '}
+                <strong>
+                  {rapidDetails.jitterMs != null ? `${rapidDetails.jitterMs} / ${rapidDetails.p95Rtt ?? 'n/a'} ms` : 'n/a'}
+                </strong>
+              </article>
+              <article className="diag-metric">
+                Max Loss Streak <strong>{rapidDetails.lossStreakMax}</strong>
               </article>
               <article className="diag-metric">
                 Error Rate{' '}
@@ -1455,7 +1471,8 @@ function App() {
                 <input
                   value={diagnosticsHostInput}
                   onChange={(e) => setDiagnosticsHostInput(e.target.value)}
-                  placeholder="Target Host (e.g. 1.1.1.1)"
+                  onKeyDown={(e) => runOnEnter(e, handleTcpPing)}
+                  placeholder="Enter a hostname"
                 />
                 <input
                   id="tcpPort"
@@ -1479,7 +1496,8 @@ function App() {
                 <input
                   value={diagnosticsHostInput}
                   onChange={(e) => setDiagnosticsHostInput(e.target.value)}
-                  placeholder="Destination IP/Domain"
+                  onKeyDown={(e) => runOnEnter(e, handleMtrRun)}
+                  placeholder="Enter a hostname"
                 />
                 <input
                   id="mtrRounds"
@@ -1503,7 +1521,8 @@ function App() {
                 <input
                   value={diagnosticsHostInput}
                   onChange={(e) => setDiagnosticsHostInput(e.target.value)}
-                  placeholder="Domain name"
+                  onKeyDown={(e) => runOnEnter(e, handleDnsQuery)}
+                  placeholder="Enter a hostname"
                 />
                 <select id="dnsType" value={dnsType} onChange={(e) => setDnsType(e.target.value)}>
                   <option value="A">Type: A</option>
@@ -1526,7 +1545,8 @@ function App() {
                 <input
                   value={diagnosticsHostInput}
                   onChange={(e) => setDiagnosticsHostInput(e.target.value)}
-                  placeholder="Target IP"
+                  onKeyDown={(e) => runOnEnter(e, handlePortScan)}
+                  placeholder="Enter a hostname"
                 />
                 <input
                   id="portList"
@@ -1561,12 +1581,16 @@ function App() {
                 id="whoisDomain"
                 value={whoisInput}
                 onChange={(e) => setWhoisInput(e.target.value)}
-                placeholder="Enter domain name (e.g. example.com)"
+                onKeyDown={(e) => runOnEnter(e, handleWhoisLookup)}
+                placeholder="Enter a hostname"
               />
-              <button className="whois-primary" onClick={handleWhoisLookup} disabled={whoisLoading}>
+              <button className="whois-primary" onClick={handleWhoisLookup} disabled={whoisLoading || !hasWhoisApiKey}>
                 {whoisLoading ? 'Running...' : 'WHOIS Lookup'}
               </button>
             </div>
+            {hasWhoisApiKey ? null : (
+              <p className="empty">WHOIS lookup disabled. Add your Apilayer API key in Settings to enable this action.</p>
+            )}
           </section>
 
           <section className="card whois-result-card">
@@ -1641,6 +1665,7 @@ function App() {
         <span>{status}</span>
         <span className="app-attribution">NetPulse by Gabriel Chavez • Made in Mexico with love.</span>
       </footer>
+      </div>
     </main>
   );
 }

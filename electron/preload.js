@@ -3,11 +3,22 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('networkAPI', {
   pingHost: (host) => ipcRenderer.invoke('ping:run', host),
   pingSample: (host, options) => ipcRenderer.invoke('ping:sample', host, options),
-  runRapidPing: (host, count, jobId) => ipcRenderer.invoke('ping:rapid', host, count, jobId),
-  onRapidPingUpdate: (callback) => {
+  startFloodPing: (payload) => ipcRenderer.invoke('ping:floodStart', payload),
+  cancelFloodPing: () => ipcRenderer.invoke('ping:floodCancel'),
+  onFloodPingSample: (callback) => {
     const handler = (_event, payload) => callback(payload);
-    ipcRenderer.on('ping:rapid:update', handler);
-    return () => ipcRenderer.removeListener('ping:rapid:update', handler);
+    ipcRenderer.on('ping:floodSample', handler);
+    return () => ipcRenderer.removeListener('ping:floodSample', handler);
+  },
+  onFloodPingDone: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('ping:floodDone', handler);
+    return () => ipcRenderer.removeListener('ping:floodDone', handler);
+  },
+  onFloodPingStatus: (callback) => {
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('ping:floodStatus', handler);
+    return () => ipcRenderer.removeListener('ping:floodStatus', handler);
   },
   runTraceroute: (host) => ipcRenderer.invoke('trace:run', host),
   runTcpPing: (host, port, timeoutMs) => ipcRenderer.invoke('tcp:ping', host, port, timeoutMs),

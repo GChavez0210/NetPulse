@@ -7,6 +7,24 @@ const dns = require('dns');
 const { spawn } = require('child_process');
 
 let mainWindow;
+const FLOOD_MIN_INTERVAL_MS = 200;
+const FLOOD_DEFAULT_INTERVAL_MS = 500;
+const FLOOD_ALLOWED_COUNTS = new Set([100, 1000]);
+const FLOOD_ALLOWED_MODES = new Set(['ICMP', 'TCP']);
+
+const floodTestState = {
+  running: false,
+  cancelled: false,
+  target: '',
+  mode: 'ICMP',
+  port: null,
+  count: 0,
+  sent: 0,
+  received: 0,
+  startedAt: null,
+  endedAt: null,
+  ownerWebContentsId: null
+};
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -238,21 +256,19 @@ function runTraceroute(host) {
   });
 }
 
-function runRapidPing(host, count) {
+function runRapidProbe(host, timeoutMs = 300) {
   return new Promise((resolve) => {
     if (!isValidHost(host)) {
-      resolve({ ok: false, code: -1, output: 'Invalid host.' });
+      resolve({ ok: false, latencyMs: null, output: 'Invalid host.' });
       return;
     }
 
-    const allowedCounts = new Set([100, 1000]);
-    const packets = Number.parseInt(String(count), 10);
-    if (!allowedCounts.has(packets)) {
-      resolve({ ok: false, code: -1, output: 'Only 100 or 1000 packet runs are supported.' });
-      return;
-    }
-
-    const args = process.platform === 'win32' ? ['-n', String(packets), host] : ['-c', String(packets), host];
+    const safeTimeout = Math.min(Math.max(Number.parseInt(String(timeoutMs), 10) || 300, 100), 5000);
+    const unixTimeoutSeconds = Math.max(1, Math.ceil(safeTimeout / 1000));
+    const args =
+      process.platform === 'win32'
+        ? ['-n', '1', '-w', String(safeTimeout), host]
+        : ['-c', '1', '-W', String(unixTimeoutSeconds), host];
     const child = spawn('ping', args, { shell: false });
     let output = '';
 
@@ -265,26 +281,12 @@ function runRapidPing(host, count) {
     });
 
     child.on('error', (error) => {
-      resolve({ ok: false, code: -1, output: error.message });
+      resolve({ ok: false, latencyMs: null, output: String(error?.message || error || 'Probe failed.') });
     });
 
     child.on('close', (code) => {
-      const stats = parsePacketLoss(output);
-      resolve({
-        ok: code === 0,
-        code: code ?? -1,
-        output,
-        report: stats
-          ? {
-              host,
-              packetsRequested: packets,
-              sent: stats.sent,
-              received: stats.received,
-              lost: stats.lost,
-              lossPct: stats.lossPct
-            }
-          : null
-      });
+      const latencyMs = code === 0 ? parseLatencyMs(output) : null;
+      resolve({ ok: code === 0 && latencyMs != null, latencyMs, output });
     });
   });
 }
@@ -486,120 +488,295 @@ async function runMtrLike(host, rounds = 5) {
   return { ok: true, host, rounds: safeRounds, hops, problematicHop };
 }
 
-function buildRapidPacketUpdate(line) {
-  if (!line) return null;
-  const cleanLine = line.trim();
-  if (!cleanLine) return null;
-
-  if (/(reply from|bytes from|icmp_seq=)/i.test(cleanLine)) {
-    const latencyMatch = cleanLine.match(/time[=<]?\s*(\d+(?:\.\d+)?)\s*ms/i);
-    const latencyMs = latencyMatch ? Number.parseFloat(latencyMatch[1]) : null;
-    const state = latencyMs != null && latencyMs > 80 ? 'jitter' : 'success';
-    return { type: 'packet', state, latencyMs, text: cleanLine };
-  }
-
-  if (
-    /(timed out|request timeout|destination host unreachable|general failure|100% packet loss|packet loss 100)/i.test(cleanLine)
-  ) {
-    return { type: 'packet', state: 'failed', latencyMs: null, text: cleanLine };
-  }
-
-  return { type: 'meta', text: cleanLine };
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
-function runRapidPingStreaming(webContents, jobId, host, count) {
+function chooseAdaptiveInterval(avgRtt, previousInterval) {
+  if (avgRtt == null || !Number.isFinite(avgRtt)) {
+    const fallback = Number.isFinite(previousInterval) ? previousInterval : FLOOD_DEFAULT_INTERVAL_MS;
+    return Math.max(FLOOD_MIN_INTERVAL_MS, fallback);
+  }
+
+  let nextInterval = FLOOD_DEFAULT_INTERVAL_MS;
+  if (avgRtt < 20) {
+    nextInterval = 200;
+  } else if (avgRtt < 100) {
+    nextInterval = 300;
+  } else {
+    nextInterval = 500;
+  }
+
+  return Math.max(FLOOD_MIN_INTERVAL_MS, nextInterval);
+}
+
+function rollingAvg(validRtts, windowSize = 10) {
+  if (!Array.isArray(validRtts) || validRtts.length === 0) {
+    return null;
+  }
+  const safeWindow = Math.min(Math.max(Number.parseInt(String(windowSize), 10) || 10, 1), 100);
+  const tail = validRtts.slice(-safeWindow);
+  if (tail.length === 0) return null;
+  const sum = tail.reduce((acc, value) => acc + value, 0);
+  return Number.isFinite(sum) ? sum / tail.length : null;
+}
+
+function percentile(sortedValues, ratio) {
+  if (!Array.isArray(sortedValues) || sortedValues.length === 0) return null;
+  const idx = Math.min(sortedValues.length - 1, Math.max(0, Math.ceil(sortedValues.length * ratio) - 1));
+  return sortedValues[idx];
+}
+
+function computeSummary(samples, metadata) {
+  const safeSamples = Array.isArray(samples) ? samples : [];
+  const sent = safeSamples.length;
+  const validRtts = safeSamples.map((sample) => sample.rtt_ms).filter((value) => Number.isFinite(value));
+  const received = validRtts.length;
+  const lost = Math.max(sent - received, 0);
+  const lossPct = sent > 0 ? Number((((lost * 100) / sent)).toFixed(2)) : 0;
+
+  const sortedRtts = [...validRtts].sort((a, b) => a - b);
+  const min = sortedRtts.length > 0 ? sortedRtts[0] : null;
+  const max = sortedRtts.length > 0 ? sortedRtts[sortedRtts.length - 1] : null;
+  const avg = sortedRtts.length > 0 ? sortedRtts.reduce((acc, value) => acc + value, 0) / sortedRtts.length : null;
+  const p95 = percentile(sortedRtts, 0.95);
+
+  const jitterDeltas = [];
+  for (let idx = 1; idx < validRtts.length; idx += 1) {
+    jitterDeltas.push(Math.abs(validRtts[idx] - validRtts[idx - 1]));
+  }
+  const jitter = jitterDeltas.length > 0 ? jitterDeltas.reduce((acc, value) => acc + value, 0) / jitterDeltas.length : null;
+
+  let streak = 0;
+  let lossStreakMax = 0;
+  for (const sample of safeSamples) {
+    if (sample.timeout) {
+      streak += 1;
+      lossStreakMax = Math.max(lossStreakMax, streak);
+    } else {
+      streak = 0;
+    }
+  }
+
+  return {
+    target: metadata.target,
+    mode: metadata.mode,
+    port: metadata.port ?? null,
+    count: metadata.count,
+    sent,
+    received,
+    loss_pct: lossPct,
+    min_rtt_ms: min != null ? Number(min.toFixed(2)) : null,
+    avg_rtt_ms: avg != null ? Number(avg.toFixed(2)) : null,
+    max_rtt_ms: max != null ? Number(max.toFixed(2)) : null,
+    jitter_ms: jitter != null ? Number(jitter.toFixed(2)) : null,
+    p95_rtt_ms: p95 != null ? Number(p95.toFixed(2)) : null,
+    lossStreakMax
+  };
+}
+
+function notifyFloodStatus(webContents, status, message) {
+  try {
+    webContents.send('ping:floodStatus', { status, message: message || undefined });
+  } catch {
+    // Renderer may have gone away while a run is active.
+  }
+}
+
+function notifyFloodSample(webContents, payload) {
+  try {
+    webContents.send('ping:floodSample', payload);
+  } catch {
+    // Renderer may have gone away while a run is active.
+  }
+}
+
+function notifyFloodDone(webContents, summary) {
+  try {
+    webContents.send('ping:floodDone', { summary });
+  } catch {
+    // Renderer may have gone away while a run is active.
+  }
+}
+
+function runSingleTcpProbe(host, port = 443, timeoutMs = 1000) {
   return new Promise((resolve) => {
     if (!isValidHost(host)) {
-      resolve({ ok: false, code: -1, output: 'Invalid host.' });
+      resolve({ ok: false, rtt_ms: null, timeout: true, output: 'Invalid host.' });
       return;
     }
 
-    const allowedCounts = new Set([100, 1000]);
-    const packets = Number.parseInt(String(count), 10);
-    if (!allowedCounts.has(packets)) {
-      resolve({ ok: false, code: -1, output: 'Only 100 or 1000 packet runs are supported.' });
-      return;
-    }
+    const safePort = Math.min(Math.max(Number.parseInt(String(port), 10) || 443, 1), 65535);
+    const safeTimeout = Math.min(Math.max(Number.parseInt(String(timeoutMs), 10) || 1000, 200), 10000);
+    const socket = new net.Socket();
+    const started = process.hrtime.bigint();
+    let settled = false;
 
-    const sendUpdate = (payload) => {
+    const finish = (payload) => {
+      if (settled) return;
+      settled = true;
       try {
-        webContents.send('ping:rapid:update', { jobId, ...payload });
+        socket.destroy();
       } catch {
-        // Renderer may have been destroyed; ignore to avoid crashing the process.
+        // ignore
       }
+      resolve(payload);
     };
 
-    const args = process.platform === 'win32' ? ['-n', String(packets), host] : ['-c', String(packets), host];
-    const child = spawn('ping', args, { shell: false });
-    let output = '';
-    let packetIndex = 0;
-    let stdoutBuffer = '';
-    let stderrBuffer = '';
+    socket.setTimeout(safeTimeout);
 
-    const processLine = (line) => {
-      const update = buildRapidPacketUpdate(line);
-      if (!update) return;
-
-      if (update.type === 'packet') {
-        sendUpdate({
-          type: 'packet',
-          index: packetIndex,
-          state: update.state,
-          latencyMs: update.latencyMs,
-          text: update.text
-        });
-        packetIndex += 1;
-      } else {
-        sendUpdate({ type: 'meta', text: update.text });
-      }
-    };
-
-    child.stdout.on('data', (chunk) => {
-      const raw = chunk.toString();
-      output += raw;
-      stdoutBuffer += raw;
-      const lines = stdoutBuffer.split(/\r?\n/);
-      stdoutBuffer = lines.pop() || '';
-      lines.forEach(processLine);
-    });
-
-    child.stderr.on('data', (chunk) => {
-      const raw = chunk.toString();
-      output += raw;
-      stderrBuffer += raw;
-      const lines = stderrBuffer.split(/\r?\n/);
-      stderrBuffer = lines.pop() || '';
-      lines.forEach(processLine);
-    });
-
-    child.on('error', (error) => {
-      sendUpdate({ type: 'meta', text: error.message });
-      resolve({ ok: false, code: -1, output: error.message });
-    });
-
-    child.on('close', (code) => {
-      if (stdoutBuffer.trim()) processLine(stdoutBuffer);
-      if (stderrBuffer.trim()) processLine(stderrBuffer);
-
-      const stats = parsePacketLoss(output);
-      sendUpdate({ type: 'done' });
-      resolve({
-        ok: code === 0,
-        code: code ?? -1,
-        output,
-        report: stats
-          ? {
-              host,
-              packetsRequested: packets,
-              sent: stats.sent,
-              received: stats.received,
-              lost: stats.lost,
-              lossPct: stats.lossPct
-            }
-          : null
+    socket.on('connect', () => {
+      const ended = process.hrtime.bigint();
+      finish({
+        ok: true,
+        rtt_ms: Number((Number(ended - started) / 1e6).toFixed(2)),
+        timeout: false,
+        output: `TCP connect success on ${host}:${safePort}`
       });
     });
+
+    socket.on('timeout', () => {
+      finish({
+        ok: false,
+        rtt_ms: null,
+        timeout: true,
+        output: `TCP timeout on ${host}:${safePort}`
+      });
+    });
+
+    socket.on('error', (error) => {
+      const ended = process.hrtime.bigint();
+      const code = String(error?.code || '');
+      if (code === 'ECONNREFUSED') {
+        finish({
+          ok: true,
+          rtt_ms: Number((Number(ended - started) / 1e6).toFixed(2)),
+          timeout: false,
+          output: `TCP refused on ${host}:${safePort}`
+        });
+        return;
+      }
+      finish({
+        ok: false,
+        rtt_ms: null,
+        timeout: true,
+        output: error?.message || 'TCP probe failed.'
+      });
+    });
+
+    socket.connect(safePort, host);
   });
+}
+
+async function runFloodTestLoop(webContents, options) {
+  const { target, count, mode, timeoutMs, port } = options;
+  const samples = [];
+  const validRtts = [];
+  let intervalMs = FLOOD_DEFAULT_INTERVAL_MS;
+
+  floodTestState.running = true;
+  floodTestState.cancelled = false;
+  floodTestState.target = target;
+  floodTestState.mode = mode;
+  floodTestState.port = port ?? null;
+  floodTestState.count = count;
+  floodTestState.sent = 0;
+  floodTestState.received = 0;
+  floodTestState.startedAt = new Date().toISOString();
+  floodTestState.endedAt = null;
+  floodTestState.ownerWebContentsId = webContents.id;
+
+  notifyFloodStatus(webContents, 'running', `Flood test started for ${target}.`);
+
+  try {
+    for (let seq = 1; seq <= count; seq += 1) {
+      if (floodTestState.cancelled) break;
+
+      // eslint-disable-next-line no-await-in-loop
+      const probe =
+        mode === 'TCP'
+          ? await runSingleTcpProbe(target, port, timeoutMs)
+          : await runRapidProbe(target, timeoutMs);
+
+      const rttMs = Number.isFinite(probe.rtt_ms) ? probe.rtt_ms : probe.latencyMs;
+      const timeout = !(probe.ok && Number.isFinite(rttMs));
+      const sample = {
+        seq,
+        timestamp: new Date().toISOString(),
+        rtt_ms: timeout ? null : Number(Number(rttMs).toFixed(2)),
+        timeout
+      };
+
+      samples.push(sample);
+      floodTestState.sent = samples.length;
+      if (!timeout) {
+        floodTestState.received += 1;
+        validRtts.push(sample.rtt_ms);
+      }
+
+      notifyFloodSample(webContents, sample);
+
+      const avgRtt = rollingAvg(validRtts, 10);
+      intervalMs = chooseAdaptiveInterval(avgRtt, intervalMs);
+
+      if (seq < count && !floodTestState.cancelled) {
+        // eslint-disable-next-line no-await-in-loop
+        await sleep(intervalMs);
+      }
+    }
+
+    const summary = computeSummary(samples, {
+      target,
+      mode,
+      port: mode === 'TCP' ? port : null,
+      count
+    });
+
+    summary.startedAt = floodTestState.startedAt;
+    summary.endedAt = new Date().toISOString();
+    summary.status = floodTestState.cancelled ? 'cancelled' : 'done';
+    summary.interval_min_ms = FLOOD_MIN_INTERVAL_MS;
+
+    floodTestState.running = false;
+    floodTestState.endedAt = summary.endedAt;
+    notifyFloodDone(webContents, summary);
+    notifyFloodStatus(webContents, summary.status, floodTestState.cancelled ? 'Flood test cancelled.' : 'Flood test completed.');
+
+    return { ok: true, summary };
+  } catch (error) {
+    floodTestState.running = false;
+    floodTestState.endedAt = new Date().toISOString();
+    notifyFloodStatus(webContents, 'error', error?.message || 'Flood test failed.');
+    return { ok: false, error: error?.message || 'Flood test failed.' };
+  } finally {
+    floodTestState.running = false;
+    floodTestState.ownerWebContentsId = null;
+  }
+}
+
+function sanitizeFloodStartPayload(payload) {
+  const target = String(payload?.target || '').trim();
+  if (!target || !isValidHost(target)) {
+    return { ok: false, error: 'Invalid host.' };
+  }
+
+  const count = Number.parseInt(String(payload?.count), 10);
+  if (!FLOOD_ALLOWED_COUNTS.has(count)) {
+    return { ok: false, error: 'Flood test count must be 100 or 1000.' };
+  }
+
+  const mode = String(payload?.mode || 'ICMP').toUpperCase();
+  if (!FLOOD_ALLOWED_MODES.has(mode)) {
+    return { ok: false, error: 'Flood test mode must be ICMP or TCP.' };
+  }
+
+  const timeoutMs = Math.min(Math.max(Number.parseInt(String(payload?.timeoutMs), 10) || 1000, 300), 5000);
+  const port = mode === 'TCP' ? Math.min(Math.max(Number.parseInt(String(payload?.port), 10) || 443, 1), 65535) : null;
+
+  return {
+    ok: true,
+    options: { target, count, mode, timeoutMs, port }
+  };
 }
 
 function runWhoisLookup(domain, providedApiKey) {
@@ -674,11 +851,41 @@ app.whenReady().then(() => {
     return runSinglePing(host, options || {});
   });
 
-  ipcMain.handle('ping:rapid', async (event, host, count, jobId) => {
-    if (jobId) {
-      return runRapidPingStreaming(event.sender, String(jobId), host, count);
+  ipcMain.handle('ping:floodStart', async (event, payload) => {
+    if (floodTestState.running) {
+      notifyFloodStatus(event.sender, 'error', 'Flood test already running');
+      return { ok: false, error: 'Flood test already running' };
     }
-    return runRapidPing(host, count);
+
+    const sanitized = sanitizeFloodStartPayload(payload);
+    if (!sanitized.ok) {
+      notifyFloodStatus(event.sender, 'error', sanitized.error);
+      return { ok: false, error: sanitized.error };
+    }
+
+    runFloodTestLoop(event.sender, sanitized.options).catch((error) => {
+      notifyFloodStatus(event.sender, 'error', error?.message || 'Flood test failed.');
+    });
+
+    return {
+      ok: true,
+      status: 'running',
+      state: {
+        running: true,
+        target: sanitized.options.target,
+        mode: sanitized.options.mode,
+        port: sanitized.options.port,
+        count: sanitized.options.count
+      }
+    };
+  });
+
+  ipcMain.handle('ping:floodCancel', async () => {
+    if (!floodTestState.running) {
+      return { ok: false, error: 'No flood test running' };
+    }
+    floodTestState.cancelled = true;
+    return { ok: true };
   });
 
   ipcMain.handle('trace:run', async (_event, host) => {

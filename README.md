@@ -1,4 +1,4 @@
-# NetPulse v0.1.1 (Electron + React + Vite)
+# NetPulse v0.1.2 (Electron + React + Vite)
 
 Fast, focused network troubleshooting.
 
@@ -8,7 +8,7 @@ NetPulse is a desktop diagnostics suite with real-time monitoring and utility mo
 
 - Multi-target ping dashboard with live sparkline charts
 - Packet loss test with streaming sequence map and diagnostic log
-- Traceroute with parsed hop analysis and export/share
+- Traceroute with parsed hop analysis and CSV export
 - Dedicated diagnostics hub:
   - TCP ping (SYN/connect reachability)
   - MTR-style multi-round hop analysis
@@ -69,7 +69,7 @@ The official app/installer icon is `netpulse_icon.ico`.
   - streaming diagnostic log
 - `Traceroute`
   - hop cards, status bars, summary stats
-  - rerun/export/share actions
+  - rerun/export CSV actions
 - `Diagnostics`
   - dedicated diagnostics target input (separate from Ping tab)
   - TCP ping, MTR-style, DNS toolkit, port scan
@@ -83,7 +83,11 @@ The official app/installer icon is `netpulse_icon.ico`.
 
 - `ping:run`
 - `ping:sample`
-- `ping:rapid`
+- `ping:floodStart`
+- `ping:floodSample`
+- `ping:floodDone`
+- `ping:floodStatus`
+- `ping:floodCancel`
 - `trace:run`
 - `tcp:ping`
 - `mtr:run`
@@ -99,6 +103,20 @@ The official app/installer icon is `netpulse_icon.ico`.
 - `nodeIntegration: false`
 - Host validation before command execution
 - Uses Electron `safeStorage` for API key encryption when available
+
+## Third-Party Service Disclaimer
+
+NetPulse integrates with the Apilayer WHOIS API (`https://api.apilayer.com/whois/query`) to retrieve WHOIS and domain registration data when a valid API key is configured by the user.
+
+NetPulse does not store, proxy, or resell WHOIS data beyond local caching for performance purposes. All WHOIS queries are performed directly from the user's local application to the external API provider.
+
+Use of the WHOIS functionality is subject to the terms, conditions, rate limits, and availability of the respective third-party service provider. Users are responsible for:
+
+- Obtaining and maintaining their own API key
+- Complying with the provider's Terms of Service
+- Managing API usage and associated costs
+
+NetPulse is not affiliated with, endorsed by, or sponsored by Apilayer or any other WHOIS data provider. Service interruptions, data accuracy, or API changes are outside the control of this application.
 
 ## License
 
