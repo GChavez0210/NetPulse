@@ -1,79 +1,63 @@
 @import url('https://fonts.googleapis.com/css2?family=Geist:wght@500;600;700&family=Inter:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
 
 :root {
-  --bg: #0f172a;
-  --bg-rgb: 15, 23, 42;
-  --card: #1e293b;
-  --card-rgb: 30, 41, 59;
-  --recessed: #020617;
-  --recessed-rgb: 2, 6, 23;
-  --text-heading: #ffffff;
-  --text-body: #94a3b8;
-  --mono: #a0ffcc;
+  /* Slate Grayscale & Solar Orange Colors */
+  --bg: #0b0f14;
+  /* Near Black */
+  --surface-primary: #11161c;
+  /* Dark Charcoal */
+  --surface-secondary: #161b22;
+  --surface-card: #141a21;
+  --surface-hover: #1c232b;
+  --surface-recessed: #0b0f14;
+  /* Recessed inputs match Near Black background */
 
-  --primary: #f97316;
-  --primary-2: #ea580c;
-  --primary-solid: #ea580c;
-  --primary-glow: 0 0 20px rgba(249, 115, 22, 0.4);
+  --border: rgba(255, 255, 255, 0.06);
+  --border-focus: rgba(249, 115, 22, 0.5);
 
-  --neo-light: rgba(255, 255, 255, 0.03);
-  --neo-dark: rgba(0, 0, 0, 0.5);
+  --text-primary: #ffffff;
+  /* Pure White */
+  --text-secondary: #9ca3af;
+  /* Slate Gray */
+  --text-muted: #6b7280;
+  --text-mono: #e5e7eb;
 
+  --accent: #f97316;
+  /* Solar Orange */
+  --accent-hover: #ea580c;
+
+  /* Status */
   --success: #22c55e;
   --warning: #eab308;
   --danger: #ef4444;
-  --baseline: #94a3b8;
-  --chart-line-active: #f97316;
-  --chart-line-base: #94a3b8;
-  --chart-area: rgba(148, 163, 184, 0.14);
-  --chart-axis: rgba(148, 163, 184, 0.26);
-  --chart-grid: rgba(148, 163, 184, 0.2);
-  --chart-surface: rgba(15, 23, 42, 0.72);
 
-  --radius: 8px;
-  --glass-border: 1px solid rgba(255, 255, 255, 0.1);
-}
+  /* Chart Colors */
+  --chart-line: #f97316;
+  --chart-grid: rgba(255, 255, 255, 0.03);
+  --chart-bg: #0b0f14;
+  --chart-axis: rgba(255, 255, 255, 0.05);
 
-body.light {
-  --bg: #f8fafc;
-  --bg-rgb: 248, 250, 252;
-  --card: #ffffff;
-  --card-rgb: 255, 255, 255;
-  --recessed: #f1f5f9;
-  --recessed-rgb: 241, 245, 249;
-  --text-heading: #0f172a;
-  --text-body: #475569;
-  --mono: #065f46;
+  /* Neomorphic Soft Lift & Recessed Shadows */
+  --shadow-lift: -2px -2px 4px rgba(255, 255, 255, 0.03), 2px 2px 4px rgba(0, 0, 0, 0.5);
+  --shadow-recessed: inset 2px 2px 5px rgba(0, 0, 0, 0.6), inset -1px -1px 2px rgba(255, 255, 255, 0.02);
 
-  --primary: #ea580c;
-  --primary-2: #ea580c;
-  --primary-solid: #ea580c;
-  --primary-glow: 0 4px 12px rgba(234, 88, 12, 0.2);
-
-  --neo-light: rgba(255, 255, 255, 0.8);
-  --neo-dark: rgba(148, 163, 184, 0.3);
-  --baseline: #475569;
-  --chart-line-active: #ea580c;
-  --chart-line-base: #475569;
-  --chart-area: rgba(71, 85, 105, 0.14);
-  --chart-axis: rgba(71, 85, 105, 0.3);
-  --chart-grid: rgba(71, 85, 105, 0.2);
-  --chart-surface: rgba(241, 245, 249, 0.72);
+  --radius: 12px;
+  --radius-sm: 8px;
+  --font-sans: Inter, Geist, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', Consolas, monospace;
 }
 
 body {
-  color: var(--text-body);
-  background:
-    radial-gradient(980px 380px at 12% -8%, rgba(249, 115, 22, 0.12), transparent 60%),
-    radial-gradient(680px 260px at 86% 8%, rgba(255, 255, 255, 0.03), transparent 74%),
-    linear-gradient(165deg, var(--bg), #0b1220 50%, #060c19);
+  background-color: var(--bg);
+  color: var(--text-primary);
+  background-image: none;
+  /* No gradients */
 }
 
+/* Force light mode to use the exact same dark theme properties */
 body.light {
-  background:
-    radial-gradient(980px 380px at 12% -8%, rgba(234, 88, 12, 0.09), transparent 62%),
-    radial-gradient(680px 260px at 86% 8%, rgba(148, 163, 184, 0.12), transparent 74%),
-    linear-gradient(165deg, var(--bg), #f1f5f9 50%, #eef2f6);
+  background-color: var(--bg);
+  background-image: none;
 }
 
 h1,
@@ -81,8 +65,11 @@ h2,
 h3,
 h4,
 h5 {
-  font-family: Inter, Geist, 'Segoe UI', sans-serif;
-  color: var(--text-heading);
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  font-weight: 600;
+  /* Semi-Bold */
+  letter-spacing: 0.05em;
 }
 
 pre,
@@ -90,100 +77,128 @@ code,
 .diag-log-pre,
 .whois-terminal,
 .diag-metric strong {
-  font-family: 'JetBrains Mono', Consolas, monospace;
-  color: var(--mono);
+  font-family: var(--font-mono);
+  color: var(--text-mono);
 }
 
-.glass {
-  backdrop-filter: blur(12px);
-  background: rgba(var(--card-rgb), 0.7);
-  border: var(--glass-border);
-}
-
+/* Base structural styles - Neomorphic Soft Lift */
 .card,
 .test-card,
-.chart-wrap,
 .diag-card,
-.status-bar,
 .trace-hop,
-.diag-log,
 .whois-search-card,
 .whois-result-card,
 .settings-panel {
   border-radius: var(--radius);
-  background: rgba(var(--card-rgb), 0.7);
-  border: var(--glass-border);
+  background: var(--surface-primary);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lift);
+}
+
+/* Inset panels - True Midnight */
+.input-well,
+.diag-log,
+pre,
+.whois-terminal,
+.diag-log-pre,
+input,
+select,
+textarea {
+  background: var(--surface-recessed);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-recessed);
+}
+
+/* Glass Elements */
+.chart-wrap {
+  border-radius: var(--radius);
+  background: rgba(15, 23, 42, 0.4);
   backdrop-filter: blur(12px);
-  box-shadow:
-    -5px -5px 12px var(--neo-light),
-    9px 9px 18px var(--neo-dark);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .btn,
 button {
-  border-radius: var(--radius);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(145deg, rgba(var(--card-rgb), 0.95), rgba(var(--recessed-rgb), 0.92));
-  color: var(--text-heading);
-  box-shadow:
-    -4px -4px 10px var(--neo-light),
-    8px 8px 16px var(--neo-dark);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-lift);
+  /* Neomorphic lift */
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:hover {
+  background: var(--surface-hover);
 }
 
 .btn-primary,
-button:not(.secondary):not(.danger):not(.ghost) {
-  background: linear-gradient(145deg, var(--primary), var(--primary-2));
+button:not(.secondary):not(.danger):not(.ghost):not(.tab-btn) {
+  background: var(--accent);
   color: #fff;
-  box-shadow:
-    -4px -4px 10px var(--neo-light),
-    8px 8px 16px var(--neo-dark),
-    var(--primary-glow);
+  border-color: transparent;
+  box-shadow: var(--shadow-lift);
+}
+
+.btn-primary:hover,
+button:not(.secondary):not(.danger):not(.ghost):not(.tab-btn):hover {
+  background: var(--accent-hover);
 }
 
 .btn-active,
 button:active,
 button.active {
-  box-shadow:
-    inset 5px 5px 10px var(--neo-dark),
-    inset -3px -3px 8px var(--neo-light);
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
   transform: translateY(1px);
 }
 
-.input-well,
+/* Primary Button active */
+button:not(.secondary):not(.danger):not(.ghost):not(.tab-btn):active,
+button:not(.secondary):not(.danger):not(.ghost):not(.tab-btn).active {
+  background: color-mix(in srgb, var(--accent) 80%, black) !important;
+  box-shadow: var(--shadow-recessed);
+}
+
 input,
 select,
 textarea {
-  border-radius: var(--radius);
-  border: var(--glass-border);
-  background: linear-gradient(165deg, rgba(var(--recessed-rgb), 0.98), rgba(var(--recessed-rgb), 0.88));
-  color: var(--text-heading);
-  box-shadow:
-    inset 5px 5px 12px var(--neo-dark),
-    inset -3px -3px 7px var(--neo-light);
+  color: var(--text-primary);
 }
 
-body.light input,
-body.light select,
-body.light textarea {
-  color: var(--text-heading);
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--border-focus);
+  outline: none;
 }
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+/* Status Colors */
 
 .status-success {
-  background: color-mix(in srgb, var(--success) 16%, transparent);
+  background: transparent;
   color: var(--success);
-  border: 1px solid color-mix(in srgb, var(--success) 50%, transparent);
+  border: 1px solid var(--success);
 }
 
 .status-warning {
-  background: color-mix(in srgb, var(--warning) 18%, transparent);
+  background: transparent;
   color: var(--warning);
-  border: 1px solid color-mix(in srgb, var(--warning) 50%, transparent);
+  border: 1px solid var(--warning);
 }
 
 .status-danger {
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  background: transparent;
   color: var(--danger);
-  border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
+  border: 1px solid var(--danger);
 }
 
 .status-success,
@@ -191,45 +206,47 @@ body.light textarea {
 .status-danger {
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
+  border-radius: 4px;
+  /* Less rounded for enterprise */
   padding: 3px 9px;
   font-size: 0.75rem;
   font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-light {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
 }
 
 .status-light.normal,
 .status-light.success {
   background: var(--success);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--success) 55%, transparent);
+  box-shadow: none;
 }
 
 .status-light.degraded,
 .status-light.warn,
 .status-light.warning {
   background: var(--warning);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--warning) 55%, transparent);
+  box-shadow: none;
 }
 
 .status-light.down,
 .status-light.bad,
 .status-light.danger {
   background: var(--danger);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--danger) 55%, transparent);
+  box-shadow: none;
 }
 
 .status-light.idle {
-  background: var(--baseline) !important;
-  box-shadow: 0 0 10px rgba(148, 163, 184, 0.35) !important;
+  background: var(--text-muted) !important;
+  box-shadow: none !important;
 }
 
-.diag-log,
-pre,
-.whois-terminal,
-.diag-log-pre {
-  background: linear-gradient(160deg, rgba(var(--recessed-rgb), 0.95), rgba(var(--recessed-rgb), 0.9));
-}
-
-/* Keep existing app layout while forcing the new gray/orange scheme consistently */
+/* Common App Layout Overrides */
 .hero-panel,
 .ping-topbar,
 .global-card,
@@ -244,29 +261,45 @@ pre,
 .query-meta,
 .entry-toggle button,
 .count-toggle button,
-.tab-btn,
 .theme-toggle,
 button.secondary,
 button.danger,
 button.ghost {
-  background: rgba(var(--card-rgb), 0.7) !important;
-  border: var(--glass-border) !important;
-  color: var(--text-heading) !important;
+  background: var(--surface-primary) !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-primary) !important;
+  box-shadow: var(--shadow-lift) !important;
 }
 
-.tab-btn.active,
 .entry-toggle button.active,
 .count-toggle button.active,
 .packetloss-start,
 .diag-run-btn,
 .whois-primary {
-  background: linear-gradient(145deg, var(--primary), var(--primary-2)) !important;
+  background: var(--accent) !important;
   color: #fff !important;
-  box-shadow: -4px -4px 10px var(--neo-light), 8px 8px 16px var(--neo-dark), var(--primary-glow) !important;
+  border-color: transparent !important;
+  box-shadow: var(--shadow-lift) !important;
+}
+
+/* Specifically style toggle buttons when active */
+.entry-toggle button.active:active,
+.count-toggle button.active:active,
+.entry-toggle button.active,
+.count-toggle button.active {
+  box-shadow: var(--shadow-recessed) !important;
+}
+
+/* Data Highlights */
+.global-card strong,
+.loss-donut strong,
+.diag-metric strong {
+  text-shadow: 0 0 8px rgba(249, 115, 22, 0.3);
+  /* Subtle glow for critical numbers */
 }
 
 .pkt.pending {
-  background: rgba(var(--recessed-rgb), 0.9) !important;
+  background: var(--surface-secondary) !important;
 }
 
 .pkt.success {
@@ -281,24 +314,29 @@ button.ghost {
   background: var(--danger) !important;
 }
 
+.diag-line.info {
+  color: var(--text-secondary) !important;
+}
+
 .diag-line.success {
   color: var(--success) !important;
 }
 
-.diag-line.jitter {
+.diag-line.jitter,
+.diag-line.warn {
   color: var(--warning) !important;
 }
 
-.diag-line.failed {
+.diag-line.failed,
+.diag-line.error {
   color: var(--danger) !important;
 }
 
-input::placeholder,
-textarea::placeholder {
-  color: var(--text-body);
-  opacity: 0.9;
+.diag-line.meta {
+  color: var(--text-muted) !important;
 }
 
+/* Charts */
 .line-chart .grid-line,
 .chart-grid .grid-line,
 .grid-line {
@@ -310,28 +348,31 @@ textarea::placeholder {
 }
 
 .chart-bg {
-  fill: var(--chart-surface) !important;
+  fill: var(--chart-bg) !important;
 }
 
 .line-chart .line,
 .chart-wrap .line {
-  stroke: var(--chart-line-active) !important;
-  filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.4)) !important;
+  stroke: var(--chart-line) !important;
+  filter: none !important;
+  /* NO GLOW */
 }
 
 .line-chart .area,
 .chart-wrap .area {
-  fill: var(--chart-area) !important;
+  fill: none !important;
+  /* NO AREA FILL */
+  display: none !important;
 }
 
 .point-marker {
-  fill: var(--chart-line-active) !important;
-  stroke: rgba(255, 255, 255, 0.65) !important;
+  fill: var(--accent) !important;
+  stroke: var(--bg) !important;
 }
 
 .latest-label,
 .grid-label {
-  fill: var(--text-body) !important;
+  fill: var(--text-secondary) !important;
 }
 
 .event-marker.up {
@@ -342,26 +383,7 @@ textarea::placeholder {
   stroke: var(--danger) !important;
 }
 
+/* Demo Theme Cleanup */
 .demo-theme-block {
-  margin-top: 14px;
-  padding: 14px;
-  border-radius: var(--radius);
-}
-
-.demo-theme-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.demo-card {
-  padding: 12px;
-}
-
-.demo-row {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-  flex-wrap: wrap;
+  display: none;
 }

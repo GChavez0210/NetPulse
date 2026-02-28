@@ -12,12 +12,48 @@ const HEALTH = {
   UNKNOWN: 'unknown'
 };
 const TABS = [
-  { id: 'ping', label: 'Ping Tests' },
-  { id: 'packetloss', label: 'Packet Loss Check' },
-  { id: 'trace', label: 'Traceroute' },
-  { id: 'diagnostics', label: 'Diagnostics' },
-  { id: 'whois', label: 'WHOIS Lookup' },
-  { id: 'settings', label: 'Settings' }
+  {
+    id: 'ping',
+    label: 'Multi-Target Ping',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+    )
+  },
+  {
+    id: 'trace',
+    label: 'Topology (Trace)',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><path d="M13 6h3a2 2 0 0 1 2 2v7"></path><path d="M6 9v2a2 2 0 0 0 2 2h3"></path></svg>
+    )
+  },
+  {
+    id: 'packetloss',
+    label: 'Flood Test',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+    )
+  },
+  {
+    id: 'diagnostics',
+    label: 'Analytics',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+    )
+  },
+  {
+    id: 'whois',
+    label: 'Identity (WHOIS)',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+    )
+  },
+  {
+    id: 'settings',
+    label: 'Configurations',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    )
+  }
 ];
 
 function getHealth(test) {
@@ -291,7 +327,6 @@ function LineChart({ points, health, liveLabel, events = [] }) {
         <line x1={padding} y1={padding} x2={padding} y2={height - padding} className="axis" />
         {plotted ? (
           <>
-            <polyline points={`${plotted} ${width - padding},${height - padding} ${padding},${height - padding}`} className="area" />
             <polyline points={plotted} className="line" />
             {markers.map((marker, index) => (
               <circle key={`${marker.x}-${marker.y}-${index}`} cx={marker.x} cy={marker.y} r="3.3" className="point-marker" />
@@ -340,7 +375,14 @@ function App() {
   const [activeTab, setActiveTab] = useState('ping');
   const [hostInput, setHostInput] = useState('');
   const [pingEntryMode, setPingEntryMode] = useState('single');
-  const [diagnosticsHostInput, setDiagnosticsHostInput] = useState('');
+
+  // Isolated Analytics Input States
+  const [tcpHostInput, setTcpHostInput] = useState('');
+  const [mtrHostInput, setMtrHostInput] = useState('');
+  const [dnsHostInput, setDnsHostInput] = useState('');
+  const [portScanHostInput, setPortScanHostInput] = useState('');
+  const [floodHostInput, setFloodHostInput] = useState('');
+
   const [bulkHostsInput, setBulkHostsInput] = useState('');
   const [whoisInput, setWhoisInput] = useState('google.com');
   const [tests, setTests] = useState([]);
@@ -403,7 +445,7 @@ function App() {
       .catch(() => setStatus('Could not load the saved API key.'));
 
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
+      Notification.requestPermission().catch(() => { });
     }
 
     return () => {
@@ -412,7 +454,7 @@ function App() {
       }
       timersRef.current.clear();
       inFlightRef.current.clear();
-      window.networkAPI.cancelFloodPing().catch(() => {});
+      window.networkAPI.cancelFloodPing().catch(() => { });
     };
   }, []);
 
@@ -664,6 +706,7 @@ function App() {
     const test = createTest(host);
     setTests((prev) => [test, ...prev]);
     setStatus(`Created new extended ping test for ${host}.`);
+    setHostInput('');
 
     setTimeout(() => startTest(test.id), 0);
   };
@@ -748,7 +791,7 @@ function App() {
   };
 
   const handleRapidPing = async () => {
-    const host = hostInput.trim();
+    const host = floodHostInput.trim();
     if (!host) {
       setStatus('Enter a host for flood packet loss test.');
       return;
@@ -764,7 +807,6 @@ function App() {
     setRapidDetails({
       host,
       mode: 'ICMP',
-      packetStates: Array.from({ length: count }, () => 'pending'),
       sent: 0,
       received: 0,
       lost: 0,
@@ -776,8 +818,9 @@ function App() {
       p95Rtt: null,
       jitterMs: null,
       lossStreakMax: 0,
-      status: 'running',
-      logLines: [{ type: 'meta', text: `[${new Date().toISOString()}] Starting fixed-count flood test for ${host}.` }]
+      status: 'working',
+      packetStates: Array.from({ length: count }, () => 'pending'),
+      logLines: [{ type: 'meta', text: `[init] Starting rapid ICMP test for ${host} (${count} pings)...` }]
     });
     setStatus(`Running fixed-count flood test (${count}) for ${host}...`);
 
@@ -797,6 +840,8 @@ function App() {
           status: 'error',
           logLines: [...prev.logLines, { type: 'failed', text: startResult?.error || 'Flood test start failed.' }]
         }));
+      } else {
+        setFloodHostInput('');
       }
     } catch (error) {
       setRapidRunning(false);
@@ -826,25 +871,26 @@ function App() {
   const handleTraceroute = async () => {
     const host = traceHost.trim();
     if (!host) {
-      setStatus('Enter a host to run traceroute.');
+      setStatus('Enter a hostname or IP for traceroute.');
       return;
     }
-
     setTraceLoading(true);
-    setStatus(`Running traceroute for ${host}...`);
+    setTraceHops([]);
+    setTraceOutput('Initializing tracing route...');
+    setStatus(`Running traceroute to ${host}...`);
+    setTraceSummary({ totalHops: 0, avgRtt: null });
+
     try {
-      const result = await window.networkAPI.runTraceroute(host);
-      setTraceOutput(result.output || 'No output.');
-      const parsed = parseTracerouteOutput(result.output);
+      const output = await window.networkAPI.runTraceroute(host);
+      setTraceOutput(output);
+      const parsed = parseTracerouteOutput(output);
       setTraceHops(parsed.hops);
       setTraceSummary({ totalHops: parsed.totalHops, avgRtt: parsed.avgRtt });
-      setTraceHost(host);
-      setStatus(result.ok ? 'Traceroute completed successfully.' : 'Traceroute completed with errors.');
+      setStatus(`Traceroute complete to ${host}.`);
+      setTraceHost('');
     } catch (error) {
-      setTraceOutput(String(error?.message || error || 'Traceroute failed.'));
-      setTraceHops([]);
-      setTraceSummary({ totalHops: 0, avgRtt: null });
-      setStatus('Traceroute failed.');
+      setTraceOutput(String(error?.message || error));
+      setStatus(`Traceroute failed to ${host}.`);
     } finally {
       setTraceLoading(false);
     }
@@ -908,48 +954,64 @@ function App() {
   };
 
   const handleTcpPing = async () => {
-    const host = diagnosticsHostInput.trim();
+    const host = tcpHostInput.trim();
     if (!host) {
-      setStatus('Enter a target host first.');
+      setStatus('Enter a hostname or IP for TCP ping.');
       return;
     }
-    setStatus(`Running TCP ping ${host}:${tcpPort}...`);
-    const result = await window.networkAPI.runTcpPing(host, tcpPort, 1500);
-    setTcpResult(result);
-    setStatus(result.ok ? 'TCP ping completed.' : `TCP ping: ${result.status || 'failed'}.`);
+    setStatus(`Pinging TCP port ${tcpPort} on ${host}...`);
+    setTcpResult(null);
+    try {
+      const result = await window.networkAPI.runTcpPing(host, tcpPort, 1500);
+      setTcpResult(result);
+      setStatus(`TCP ping to ${host}:${tcpPort} complete.`);
+      setTcpHostInput('');
+    } catch (error) {
+      setTcpResult({ error: String(error?.message || error) });
+      setStatus('TCP ping failed.');
+    }
   };
 
   const handleMtrRun = async () => {
-    const host = diagnosticsHostInput.trim();
+    const host = mtrHostInput.trim();
     if (!host) {
-      setStatus('Enter a target host for MTR.');
+      setStatus('Enter a hostname or IP for MTR.');
       return;
     }
     setMtrLoading(true);
-    setStatus(`Running MTR-style diagnostics for ${host}...`);
+    setStatus(`Running MTR-style diagnostic to ${host} (rounds: ${mtrRounds})...`);
+    setMtrResult(null);
     try {
       const result = await window.networkAPI.runMtr(host, mtrRounds);
       setMtrResult(result);
-      setStatus(result.ok ? 'MTR-style diagnostics completed.' : result.error || 'MTR diagnostics failed.');
+      setStatus(`MTR diagnostic complete to ${host}.`);
+      setMtrHostInput('');
     } finally {
       setMtrLoading(false);
     }
   };
 
   const handleDnsQuery = async () => {
-    const host = diagnosticsHostInput.trim();
+    const host = dnsHostInput.trim();
     if (!host) {
-      setStatus('Enter domain/IP for DNS query.');
+      setStatus('Enter a domain for DNS lookup.');
       return;
     }
-    setStatus(`Resolving ${dnsType} for ${host}...`);
-    const result = await window.networkAPI.queryDns(host, dnsType);
-    setDnsResult(result);
-    setStatus(result.ok ? 'DNS query completed.' : 'DNS query completed with issues.');
+    setStatus(`Running DNS query (${dnsType}) for ${host}...`);
+    setDnsResult(null);
+    try {
+      const result = await window.networkAPI.queryDns(host, dnsType);
+      setDnsResult(result);
+      setStatus(`DNS query for ${host} complete.`);
+      setDnsHostInput('');
+    } catch (error) {
+      setDnsResult({ error: String(error?.message || error) });
+      setStatus('DNS query failed.');
+    }
   };
 
   const handlePortScan = async () => {
-    const host = diagnosticsHostInput.trim();
+    const host = portScanHostInput.trim();
     if (!host) {
       setStatus('Enter a host for port scan.');
       return;
@@ -964,9 +1026,16 @@ function App() {
       return;
     }
     setStatus(`Scanning ${ports.length} ports on ${host}...`);
-    const result = await window.networkAPI.runPortScan(host, ports, 900);
-    setPortScanResult(result);
-    setStatus(result.ok ? 'Port scan completed.' : result.error || 'Port scan failed.');
+    setPortScanResult(null);
+    try {
+      const result = await window.networkAPI.runPortScan(host, ports, 900);
+      setPortScanResult(result);
+      setStatus(`Port scan complete on ${host}.`);
+      setPortScanHostInput('');
+    } catch (error) {
+      setPortScanResult({ error: String(error?.message || error) });
+      setStatus('Port scan failed.');
+    }
   };
 
   const handleSaveApiKey = async () => {
@@ -977,7 +1046,7 @@ function App() {
   const handleWhoisLookup = async () => {
     const domain = whoisInput.trim();
     if (!domain) {
-      setStatus('Enter a domain for WHOIS lookup.');
+      setStatus('Enter a domain or IP for WHOIS.');
       return;
     }
     if (!hasWhoisApiKey) {
@@ -986,13 +1055,15 @@ function App() {
     }
 
     setWhoisLoading(true);
+    setWhoisData(null);
     setStatus(`Running WHOIS lookup for ${domain}...`);
 
     try {
       const result = await window.networkAPI.lookupWhois(domain, apiKey);
       if (result.ok) {
         setWhoisData(result.data ?? {});
-        setStatus('WHOIS lookup completed successfully.');
+        setStatus(`WHOIS lookup complete for ${domain}.`);
+        setWhoisInput('');
       } else {
         setWhoisData(result.data ?? { error: result.error });
         setStatus(result.error || 'WHOIS lookup failed.');
@@ -1037,14 +1108,15 @@ function App() {
 
   return (
     <main className="app-shell">
-      <div className="app-container">
-      <section className="hero-panel">
+      <aside className="sidebar">
         <div className="brand-wrap">
           <div className="brand-logo-row">
             <img className="brand-logo" src={netPulseLogo} alt="NetPulse" />
             <span className="version-badge">v0.1.2</span>
           </div>
-          <p className="subtitle">Fast, focused network troubleshooting.</p>
+          <p className="subtitle" style={{ fontSize: '0.8rem', marginTop: '12px', lineHeight: '1.4' }}>
+            Fast, focused network troubleshooting.
+          </p>
         </div>
         <div className="tabs-bar">
           {TABS.map((tab) => (
@@ -1053,618 +1125,622 @@ function App() {
               className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
               onClick={() => setActiveTab(tab.id)}
             >
+              <span className="tab-icon">{tab.icon}</span>
               <span>{tab.label}</span>
             </button>
           ))}
         </div>
-      </section>
+      </aside>
 
-      {activeTab === 'ping' ? (
-        <section className="ping-dashboard">
-          <section className="ping-topbar">
-            <div>
-              <h2>Multi-Target Ping</h2>
-              <p className="subtitle">Real-time latency monitoring across infrastructure</p>
-            </div>
-            <div className="ping-actions">
-              <div className="entry-toggle">
-                <button
-                  className={pingEntryMode === 'single' ? 'active' : ''}
-                  onClick={() => setPingEntryMode('single')}
-                >
-                  Single IP
+      <div className="app-container">
+        {activeTab === 'ping' ? (
+          <section className="ping-dashboard">
+            <section className="ping-topbar">
+              <div>
+                <h2>Multi-Target Ping</h2>
+                <p className="subtitle">Real-time latency monitoring across infrastructure</p>
+              </div>
+              <div className="ping-actions">
+                <div className="entry-toggle">
+                  <button
+                    className={pingEntryMode === 'single' ? 'active' : ''}
+                    onClick={() => setPingEntryMode('single')}
+                  >
+                    Single IP
+                  </button>
+                  <button className={pingEntryMode === 'bulk' ? 'active' : ''} onClick={() => setPingEntryMode('bulk')}>
+                    Bulk IPs
+                  </button>
+                </div>
+                {pingEntryMode === 'single' ? (
+                  <>
+                    <input
+                      id="host"
+                      value={hostInput}
+                      onChange={(e) => setHostInput(e.target.value)}
+                      onKeyDown={(e) => runOnEnter(e, addTest)}
+                      placeholder="Enter a hostname"
+                    />
+                    <button onClick={addTest}>Add Target</button>
+                  </>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="card command-panel compact">
+              {pingEntryMode === 'bulk' ? (
+                <>
+                  <label htmlFor="bulkHosts">Bulk Hosts (one per line or comma separated)</label>
+                  <textarea
+                    id="bulkHosts"
+                    value={bulkHostsInput}
+                    onChange={(e) => setBulkHostsInput(e.target.value)}
+                    placeholder={'Enter a hostname\nexample.com\nweb-server.local'}
+                  />
+                  <p className="empty">Bulk mode: paste targets here, then click Start All to add and run them.</p>
+                </>
+              ) : (
+                <p className="empty">Single IP mode enabled. Switch to Bulk IPs to paste multiple targets.</p>
+              )}
+              <div>
+                <button className="secondary" onClick={startAll} disabled={tests.length === 0}>
+                  Start All
                 </button>
-                <button className={pingEntryMode === 'bulk' ? 'active' : ''} onClick={() => setPingEntryMode('bulk')}>
-                  Bulk IPs
+                <button className="secondary" onClick={pauseAll} disabled={tests.length === 0}>
+                  Pause All
+                </button>
+                <button className="danger" onClick={stopAll} disabled={tests.length === 0}>
+                  Stop All
                 </button>
               </div>
-              {pingEntryMode === 'single' ? (
-                <>
-                  <input
-                    id="host"
-                    value={hostInput}
-                    onChange={(e) => setHostInput(e.target.value)}
-                    onKeyDown={(e) => runOnEnter(e, addTest)}
-                    placeholder="Enter a hostname"
-                  />
-                  <button onClick={addTest}>Add Target</button>
-                </>
-              ) : null}
-            </div>
-          </section>
-
-          <section className="card command-panel compact">
-            {pingEntryMode === 'bulk' ? (
-              <>
-                <label htmlFor="bulkHosts">Bulk Hosts (one per line or comma separated)</label>
-                <textarea
-                  id="bulkHosts"
-                  value={bulkHostsInput}
-                  onChange={(e) => setBulkHostsInput(e.target.value)}
-                  placeholder={'Enter a hostname\nexample.com\nweb-server.local'}
-                />
-                <p className="empty">Bulk mode: paste targets here, then click Start All to add and run them.</p>
-              </>
-            ) : (
-              <p className="empty">Single IP mode enabled. Switch to Bulk IPs to paste multiple targets.</p>
-            )}
-            <div>
-              <button className="secondary" onClick={startAll} disabled={tests.length === 0}>
-                Start All
-              </button>
-              <button className="secondary" onClick={pauseAll} disabled={tests.length === 0}>
-                Pause All
-              </button>
-              <button className="danger" onClick={stopAll} disabled={tests.length === 0}>
-                Stop All
-              </button>
-            </div>
-            <div className="ping-options-row">
-              <label htmlFor="packetSize">Packet Size (bytes)</label>
-              <input
-                id="packetSize"
-                type="number"
-                min="1"
-                max="65000"
-                value={packetSize}
-                onChange={(e) => setPacketSize(Number.parseInt(e.target.value || '56', 10))}
-              />
-              <label className="checkbox-inline">
+              <div className="ping-options-row">
+                <label htmlFor="packetSize">Packet Size (bytes)</label>
                 <input
-                  type="checkbox"
-                  checked={dontFragment}
-                  onChange={(e) => setDontFragment(e.target.checked)}
+                  id="packetSize"
+                  type="number"
+                  min="1"
+                  max="65000"
+                  value={packetSize}
+                  onChange={(e) => setPacketSize(Number.parseInt(e.target.value || '56', 10))}
                 />
-                Don't Fragment (DF)
-              </label>
-            </div>
-          </section>
-
-          <section className="tests-grid monitor-grid ping-grid">
-            {tests.length === 0 ? <p className="empty">No active monitors. Add a target to begin.</p> : null}
-            {tests.map((test) => {
-              const health = getHealth(test);
-              const uptime = test.sent > 0 ? ((test.received / test.sent) * 100).toFixed(1) : '0.0';
-              const m = getTestMetrics(test);
-              const liveLabel = health === HEALTH.DOWN ? 'OFFLINE' : health === HEALTH.DEGRADED ? 'UNSTABLE' : 'LIVE';
-
-              return (
-                <article key={test.id} className={`test-card monitor-card ping-card health-${health}`}>
-                  <div className="test-head">
-                    <div>
-                      <div className="target-title">
-                        <span className={`status-light ${health}`} />
-                        <h3>{test.host}</h3>
-                      </div>
-                      <p className="target-sub">{test.host}</p>
-                    </div>
-                    <span className="uptime-pill">UPTIME {uptime}%</span>
-                  </div>
-
-                  {test.viewMode === 'graph' ? (
-                    <LineChart points={test.points} health={health} liveLabel={liveLabel} events={test.events} />
-                  ) : (
-                    <pre>{test.lastOutput}</pre>
-                  )}
-
-                  <div className="metric-row stats-grid">
-                    <article className="metric-box">
-                      <span>Current</span>
-                      <strong>{m.current != null ? `${m.current.toFixed(0)}ms` : '--'}</strong>
-                    </article>
-                    <article className="metric-box">
-                      <span>Average</span>
-                      <strong>{m.avg != null ? `${m.avg.toFixed(0)}ms` : '--'}</strong>
-                    </article>
-                    <article className="metric-box">
-                      <span>Max</span>
-                      <strong>{m.max != null ? `${m.max.toFixed(0)}ms` : '--'}</strong>
-                    </article>
-                  </div>
-                  <div className="metric-row metric-row-secondary stats-grid">
-                    <article className="metric-box">
-                      <span>p50</span>
-                      <strong>{m.p50 != null ? `${m.p50.toFixed(0)}ms` : '--'}</strong>
-                    </article>
-                    <article className="metric-box">
-                      <span>p95</span>
-                      <strong>{m.p95 != null ? `${m.p95.toFixed(0)}ms` : '--'}</strong>
-                    </article>
-                    <article className="metric-box">
-                      <span>p99</span>
-                      <strong>{m.p99 != null ? `${m.p99.toFixed(0)}ms` : '--'}</strong>
-                    </article>
-                    <article className="metric-box">
-                      <span>StdDev</span>
-                      <strong>{m.stddev != null ? `${m.stddev.toFixed(1)}ms` : '--'}</strong>
-                    </article>
-                  </div>
-
-                  <div className="card-actions">
-                    <button className="secondary" onClick={() => toggleTestViewMode(test.id)}>
-                      {test.viewMode === 'graph' ? 'CLI View' : 'Graph View'}
-                    </button>
-                    <button onClick={() => startTest(test.id)} disabled={test.phase === 'running'}>
-                      Resume
-                    </button>
-                    <button className="secondary" onClick={() => pauseTest(test.id)} disabled={test.phase !== 'running'}>
-                      Pause
-                    </button>
-                    <button className="danger" onClick={() => stopTest(test.id)} disabled={test.phase === 'stopped'}>
-                      Stop
-                    </button>
-                    <button className="danger" onClick={() => removeTest(test.id)}>
-                      Remove
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </section>
-
-          <section className="global-health">
-            {(() => {
-              const combined = tests.flatMap((t) => t.points.map((p) => p.latency).filter((v) => v != null));
-              const totalSent = tests.reduce((acc, t) => acc + t.sent, 0);
-              const totalReceived = tests.reduce((acc, t) => acc + t.received, 0);
-              const totalAvg = combined.length > 0 ? combined.reduce((a, b) => a + b, 0) / combined.length : null;
-              const packetLoss = totalSent > 0 ? ((totalSent - totalReceived) * 100) / totalSent : 0;
-              const online = tests.filter((t) => getHealth(t) !== HEALTH.DOWN).length;
-              return (
-                <>
-                  <article className="global-card">
-                    <span>Total Avg Latency</span>
-                    <strong>{totalAvg != null ? `${totalAvg.toFixed(1)} ms` : '--'}</strong>
-                  </article>
-                  <article className="global-card">
-                    <span>Global Packet Loss</span>
-                    <strong>{packetLoss.toFixed(2)}%</strong>
-                  </article>
-                  <article className="global-card">
-                    <span>Active Monitors</span>
-                    <strong>
-                      {online}/{tests.length || 0}
-                    </strong>
-                  </article>
-                </>
-              );
-            })()}
-          </section>
-
-          <section className="card latency-matrix">
-            <h3>Multi-Target Latency Matrix</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Target</th>
-                  <th>Avg</th>
-                  <th>Loss</th>
-                  <th>Jitter</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tests.map((test) => {
-                  const m = getTestMetrics(test);
-                  const loss = test.sent > 0 ? (((test.sent - test.received) * 100) / test.sent).toFixed(1) : '0.0';
-                  const health = getHealth(test);
-                  return (
-                    <tr key={`mx-${test.id}`} className={`matrix-${health}`}>
-                      <td>{test.host}</td>
-                      <td>{m.avg != null ? `${m.avg.toFixed(1)} ms` : '--'}</td>
-                      <td>{loss}%</td>
-                      <td>{m.stddev != null ? `${m.stddev.toFixed(1)} ms` : '--'}</td>
-                      <td>{formatHealthLabel(health)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </section>
-        </section>
-      ) : null}
-
-      {activeTab === 'trace' ? (
-        <section className="card trace-panel">
-          <div className="panel-head">
-            <h2>Traceroute</h2>
-            <div className="run-state">
-              <span className={`status-light ${traceLoading ? 'running' : 'idle'}`} />
-              <span>{traceLoading ? 'Running' : 'Idle'}</span>
-            </div>
-          </div>
-          <label htmlFor="traceHost">Target Host / IP</label>
-          <input
-            id="traceHost"
-            value={traceHost}
-            onChange={(e) => setTraceHost(e.target.value)}
-            onKeyDown={(e) => runOnEnter(e, handleTraceroute)}
-            placeholder="Enter a hostname"
-          />
-          <button onClick={handleTraceroute} disabled={traceLoading}>
-            {traceLoading ? 'Running traceroute...' : 'Run traceroute'}
-          </button>
-          <div className="trace-actions">
-            <button className="secondary" onClick={handleTraceroute} disabled={traceLoading}>
-              Rerun
-            </button>
-            <button className="secondary" onClick={handleExportTraceCsv} disabled={traceHops.length === 0}>
-              Export CSV
-            </button>
-          </div>
-
-          <section className="trace-summary">
-            <article className="trace-stat">
-              <span>Total Hops</span>
-              <strong>{traceSummary.totalHops}</strong>
-            </article>
-            <article className="trace-stat">
-              <span>Average RTT</span>
-              <strong>{traceSummary.avgRtt != null ? `${traceSummary.avgRtt.toFixed(1)} ms` : 'n/a'}</strong>
-            </article>
-          </section>
-
-          <div className="trace-list">
-            {traceHops.length === 0 ? <p className="empty">No hop analysis yet. Run traceroute to populate details.</p> : null}
-            {traceHops.map((hop) => (
-              <article key={`${hop.hop}-${hop.ip}`} className="trace-hop">
-                <div className="trace-hop-head">
-                  <strong>Hop {hop.hop}</strong>
-                  <span className={`trace-pill ${hop.status}`}>
-                    {hop.avgLatency != null ? `${hop.avgLatency.toFixed(1)} ms` : 'timeout'}
-                  </span>
-                </div>
-                <p className="trace-host">
-                  {hop.hostname} <span>{hop.ip}</span>
-                </p>
-                <div className="latency-bar-glass">
-                  <div
-                    className={`latency-bar-fill ${hop.status}`}
-                    style={{ width: `${Math.min(((hop.avgLatency || 180) / 180) * 100, 100)}%` }}
+                <label className="checkbox-inline">
+                  <input
+                    type="checkbox"
+                    checked={dontFragment}
+                    onChange={(e) => setDontFragment(e.target.checked)}
                   />
-                </div>
-              </article>
-            ))}
-          </div>
+                  Don't Fragment (DF)
+                </label>
+              </div>
+            </section>
 
-          <pre>{traceOutput}</pre>
-        </section>
-      ) : null}
+            <section className="tests-grid monitor-grid ping-grid">
+              {tests.length === 0 ? <p className="empty">No active monitors. Add a target to begin.</p> : null}
+              {tests.map((test) => {
+                const health = getHealth(test);
+                const uptime = test.sent > 0 ? ((test.received / test.sent) * 100).toFixed(1) : '0.0';
+                const m = getTestMetrics(test);
+                const liveLabel = health === HEALTH.DOWN ? 'OFFLINE' : health === HEALTH.DEGRADED ? 'UNSTABLE' : 'LIVE';
 
-      {activeTab === 'packetloss' ? (
-        <section className="packetloss-page">
-          <div className="packetloss-head">
-            <h2>Packet Loss Test</h2>
-            <p className="subtitle">Real-time network stability diagnostic for node {hostInput || 'N/A'}</p>
-          </div>
-          <section className="packetloss-controls">
+                return (
+                  <article key={test.id} className={`test-card monitor-card ping-card health-${health}`}>
+                    <div className="test-head">
+                      <div>
+                        <div className="target-title">
+                          <span className={`status-light ${health}`} />
+                          <h3>{test.host}</h3>
+                        </div>
+                        <p className="target-sub">{test.host}</p>
+                      </div>
+                      <span className="uptime-pill">UPTIME {uptime}%</span>
+                    </div>
+
+                    {test.viewMode === 'graph' ? (
+                      <LineChart points={test.points} health={health} liveLabel={liveLabel} events={test.events} />
+                    ) : (
+                      <pre>{test.lastOutput}</pre>
+                    )}
+
+                    <div className="metric-row stats-grid">
+                      <article className="metric-box">
+                        <span>Current</span>
+                        <strong>{m.current != null ? `${m.current.toFixed(0)}ms` : '--'}</strong>
+                      </article>
+                      <article className="metric-box">
+                        <span>Average</span>
+                        <strong>{m.avg != null ? `${m.avg.toFixed(0)}ms` : '--'}</strong>
+                      </article>
+                      <article className="metric-box">
+                        <span>Max</span>
+                        <strong>{m.max != null ? `${m.max.toFixed(0)}ms` : '--'}</strong>
+                      </article>
+                    </div>
+                    <div className="metric-row metric-row-secondary stats-grid">
+                      <article className="metric-box">
+                        <span>p50</span>
+                        <strong>{m.p50 != null ? `${m.p50.toFixed(0)}ms` : '--'}</strong>
+                      </article>
+                      <article className="metric-box">
+                        <span>p95</span>
+                        <strong>{m.p95 != null ? `${m.p95.toFixed(0)}ms` : '--'}</strong>
+                      </article>
+                      <article className="metric-box">
+                        <span>p99</span>
+                        <strong>{m.p99 != null ? `${m.p99.toFixed(0)}ms` : '--'}</strong>
+                      </article>
+                      <article className="metric-box">
+                        <span>StdDev</span>
+                        <strong>{m.stddev != null ? `${m.stddev.toFixed(1)}ms` : '--'}</strong>
+                      </article>
+                    </div>
+
+                    <div className="card-actions">
+                      <button className="secondary" onClick={() => toggleTestViewMode(test.id)}>
+                        {test.viewMode === 'graph' ? 'CLI View' : 'Graph View'}
+                      </button>
+                      <button onClick={() => startTest(test.id)} disabled={test.phase === 'running'}>
+                        Resume
+                      </button>
+                      <button className="secondary" onClick={() => pauseTest(test.id)} disabled={test.phase !== 'running'}>
+                        Pause
+                      </button>
+                      <button className="danger" onClick={() => stopTest(test.id)} disabled={test.phase === 'stopped'}>
+                        Stop
+                      </button>
+                      <button className="danger" onClick={() => removeTest(test.id)}>
+                        Remove
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
+
+            <section className="global-health">
+              {(() => {
+                const combined = tests.flatMap((t) => t.points.map((p) => p.latency).filter((v) => v != null));
+                const totalSent = tests.reduce((acc, t) => acc + t.sent, 0);
+                const totalReceived = tests.reduce((acc, t) => acc + t.received, 0);
+                const totalAvg = combined.length > 0 ? combined.reduce((a, b) => a + b, 0) / combined.length : null;
+                const packetLoss = totalSent > 0 ? ((totalSent - totalReceived) * 100) / totalSent : 0;
+                const online = tests.filter((t) => getHealth(t) !== HEALTH.DOWN).length;
+                return (
+                  <>
+                    <article className="global-card">
+                      <span>Total Avg Latency</span>
+                      <strong>{totalAvg != null ? `${totalAvg.toFixed(1)} ms` : '--'}</strong>
+                    </article>
+                    <article className="global-card">
+                      <span>Global Packet Loss</span>
+                      <strong>{packetLoss.toFixed(2)}%</strong>
+                    </article>
+                    <article className="global-card">
+                      <span>Active Monitors</span>
+                      <strong>
+                        {online}/{tests.length || 0}
+                      </strong>
+                    </article>
+                  </>
+                );
+              })()}
+            </section>
+
+            <section className="card latency-matrix">
+              <h3>Multi-Target Latency Matrix</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Target</th>
+                    <th>Avg</th>
+                    <th>Loss</th>
+                    <th>Jitter</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tests.map((test) => {
+                    const m = getTestMetrics(test);
+                    const loss = test.sent > 0 ? (((test.sent - test.received) * 100) / test.sent).toFixed(1) : '0.0';
+                    const health = getHealth(test);
+                    return (
+                      <tr key={`mx-${test.id}`} className={`matrix-${health}`}>
+                        <td>{test.host}</td>
+                        <td>{m.avg != null ? `${m.avg.toFixed(1)} ms` : '--'}</td>
+                        <td>{loss}%</td>
+                        <td>{m.stddev != null ? `${m.stddev.toFixed(1)} ms` : '--'}</td>
+                        <td>{formatHealthLabel(health)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </section>
+          </section>
+        ) : null}
+
+        {activeTab === 'trace' ? (
+          <section className="card trace-panel">
+            <div className="panel-head">
+              <h2>Traceroute</h2>
+              <div className="run-state">
+                <span className={`status-light ${traceLoading ? 'running' : 'idle'}`} />
+                <span>{traceLoading ? 'Running' : 'Idle'}</span>
+              </div>
+            </div>
+            <label htmlFor="traceHost">Target Host / IP</label>
             <input
-              id="packetLossHost"
-              value={hostInput}
-              onChange={(e) => setHostInput(e.target.value)}
-              onKeyDown={(e) => runOnEnter(e, handleRapidPing)}
+              id="traceHost"
+              value={traceHost}
+              onChange={(e) => setTraceHost(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleTraceroute)}
               placeholder="Enter a hostname"
             />
-            <div className="count-toggle">
-              <button className={rapidCount === 100 ? 'active' : ''} onClick={() => setRapidCount(100)}>
-                100 Pings
+            <button onClick={handleTraceroute} disabled={traceLoading}>
+              {traceLoading ? 'Running traceroute...' : 'Run traceroute'}
+            </button>
+            <div className="trace-actions">
+              <button className="secondary" onClick={handleTraceroute} disabled={traceLoading}>
+                Rerun
               </button>
-              <button className={rapidCount === 1000 ? 'active' : ''} onClick={() => setRapidCount(1000)}>
-                1000 Pings
+              <button className="secondary" onClick={handleExportTraceCsv} disabled={traceHops.length === 0}>
+                Export CSV
               </button>
             </div>
-            <button className="packetloss-start" onClick={handleRapidPing} disabled={rapidRunning}>
-              ▶ {rapidRunning ? 'RUNNING TEST...' : 'START TEST'}
-            </button>
-            <button className="secondary" onClick={handleRapidCancel} disabled={!rapidRunning}>
-              Cancel
-            </button>
-          </section>
 
-          <section className="packetloss-layout">
-            <aside className="packetloss-left">
-              <article className="loss-donut-card">
-                <div
-                  className="loss-donut"
-                  style={{
-                    background: `conic-gradient(#ff5b36 0 ${Math.max(
-                      3,
-                      Number(rapidDetails.lossPct || 0) * 3.6
-                    )}deg, rgba(40,50,72,0.85) ${Math.max(3, Number(rapidDetails.lossPct || 0) * 3.6)}deg 360deg)`
-                  }}
-                >
-                  <div>
-                    <strong>{Number(rapidDetails.lossPct || 0).toFixed(1)}%</strong>
-                    <span>Loss Rate</span>
+            <section className="trace-summary">
+              <article className="trace-stat">
+                <span>Total Hops</span>
+                <strong>{traceSummary.totalHops}</strong>
+              </article>
+              <article className="trace-stat">
+                <span>Average RTT</span>
+                <strong>{traceSummary.avgRtt != null ? `${traceSummary.avgRtt.toFixed(1)} ms` : 'n/a'}</strong>
+              </article>
+            </section>
+
+            <div className="trace-list">
+              {traceHops.length === 0 ? <p className="empty">No hop analysis yet. Run traceroute to populate details.</p> : null}
+              {traceHops.map((hop) => (
+                <article key={`${hop.hop}-${hop.ip}`} className="trace-hop">
+                  <div className="trace-hop-head">
+                    <strong>Hop {hop.hop}</strong>
+                    <span className={`trace-pill ${hop.status}`}>
+                      {hop.avgLatency != null ? `${hop.avgLatency.toFixed(1)} ms` : 'timeout'}
+                    </span>
+                  </div>
+                  <p className="trace-host">
+                    {hop.hostname} <span>{hop.ip}</span>
+                  </p>
+                  <div className="latency-bar-glass">
+                    <div
+                      className={`latency-bar-fill ${hop.status}`}
+                      style={{ width: `${Math.min(((hop.avgLatency || 180) / 180) * 100, 100)}%` }}
+                    />
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            <pre>{traceOutput}</pre>
+          </section>
+        ) : null}
+
+        {activeTab === 'packetloss' ? (
+          <section className="packetloss-page">
+            <div className="packetloss-head">
+              <h2>Packet Loss Test</h2>
+              <p className="subtitle">Real-time network stability diagnostic for node {floodHostInput || 'N/A'}</p>
+            </div>
+            <section className="packetloss-controls">
+              <input
+                id="packetLossHost"
+                value={floodHostInput}
+                onChange={(e) => setFloodHostInput(e.target.value)}
+                onKeyDown={(e) => runOnEnter(e, handleRapidPing)}
+                placeholder="Enter a hostname"
+              />
+              <div className="count-toggle">
+                <button className={rapidCount === 100 ? 'active' : ''} onClick={() => setRapidCount(100)}>
+                  100 Pings
+                </button>
+                <button className={rapidCount === 1000 ? 'active' : ''} onClick={() => setRapidCount(1000)}>
+                  1000 Pings
+                </button>
+              </div>
+              <button className="packetloss-start" onClick={handleRapidPing} disabled={rapidRunning}>
+                ▶ {rapidRunning ? 'RUNNING TEST...' : 'START TEST'}
+              </button>
+              <button className="secondary" onClick={handleRapidCancel} disabled={!rapidRunning}>
+                Cancel
+              </button>
+            </section>
+
+            <section className="packetloss-layout">
+              <aside className="packetloss-left">
+                <article className="loss-donut-card">
+                  <div
+                    className="loss-donut"
+                    style={{
+                      background:
+                        Number(rapidDetails.lossPct || 0) === 0
+                          ? `rgba(40,50,72,0.85)`
+                          : `conic-gradient(#ff5b36 0 ${Math.max(
+                            3,
+                            Number(rapidDetails.lossPct || 0) * 3.6
+                          )}deg, rgba(40,50,72,0.85) ${Math.max(3, Number(rapidDetails.lossPct || 0) * 3.6)}deg 360deg)`
+                    }}
+                  >
+                    <div>
+                      <strong>{Number(rapidDetails.lossPct || 0).toFixed(1)}%</strong>
+                      <span>Loss Rate</span>
+                    </div>
+                  </div>
+                </article>
+                <article className="diag-metric">Total Sent <strong>{rapidDetails.sent}</strong></article>
+                <article className="diag-metric">
+                  Received <strong>{rapidDetails.received}</strong>
+                </article>
+                <article className="diag-metric">
+                  Lost <strong>{rapidDetails.lost}</strong>
+                </article>
+                <article className="diag-metric">
+                  Avg RTT <strong>{rapidDetails.avgLatency != null ? `${rapidDetails.avgLatency} ms` : 'n/a'}</strong>
+                </article>
+                <article className="diag-metric">
+                  Min/Max RTT{' '}
+                  <strong>
+                    {rapidDetails.minRtt != null ? `${rapidDetails.minRtt} / ${rapidDetails.maxRtt} ms` : 'n/a'}
+                  </strong>
+                </article>
+                <article className="diag-metric">
+                  Jitter / P95{' '}
+                  <strong>
+                    {rapidDetails.jitterMs != null ? `${rapidDetails.jitterMs} / ${rapidDetails.p95Rtt ?? 'n/a'} ms` : 'n/a'}
+                  </strong>
+                </article>
+                <article className="diag-metric">
+                  Max Loss Streak <strong>{rapidDetails.lossStreakMax}</strong>
+                </article>
+                <article className="diag-metric">
+                  Error Rate{' '}
+                  <strong className={rapidDetails.lossPct >= 5 ? 'critical' : rapidDetails.lossPct >= 1 ? 'warn' : 'healthy'}>
+                    {rapidDetails.lossPct >= 5 ? 'Critical' : rapidDetails.lossPct >= 1 ? 'Warning' : 'Stable'}
+                  </strong>
+                </article>
+              </aside>
+
+              <section className="packetloss-right card">
+                <div className="sequence-head">
+                  <h3>Sequence Analysis (Pings 1-{rapidCount})</h3>
+                  <div className="sequence-legend">
+                    <span className="success">Success</span>
+                    <span className="jitter">Jitter</span>
+                    <span className="failed">Failed</span>
                   </div>
                 </div>
-              </article>
-              <article className="diag-metric">Total Sent <strong>{rapidDetails.sent}</strong></article>
-              <article className="diag-metric">
-                Received <strong>{rapidDetails.received}</strong>
-              </article>
-              <article className="diag-metric">
-                Lost <strong>{rapidDetails.lost}</strong>
-              </article>
-              <article className="diag-metric">
-                Avg RTT <strong>{rapidDetails.avgLatency != null ? `${rapidDetails.avgLatency} ms` : 'n/a'}</strong>
-              </article>
-              <article className="diag-metric">
-                Min/Max RTT{' '}
-                <strong>
-                  {rapidDetails.minRtt != null ? `${rapidDetails.minRtt} / ${rapidDetails.maxRtt} ms` : 'n/a'}
-                </strong>
-              </article>
-              <article className="diag-metric">
-                Jitter / P95{' '}
-                <strong>
-                  {rapidDetails.jitterMs != null ? `${rapidDetails.jitterMs} / ${rapidDetails.p95Rtt ?? 'n/a'} ms` : 'n/a'}
-                </strong>
-              </article>
-              <article className="diag-metric">
-                Max Loss Streak <strong>{rapidDetails.lossStreakMax}</strong>
-              </article>
-              <article className="diag-metric">
-                Error Rate{' '}
-                <strong className={rapidDetails.lossPct >= 5 ? 'critical' : rapidDetails.lossPct >= 1 ? 'warn' : 'healthy'}>
-                  {rapidDetails.lossPct >= 5 ? 'Critical' : rapidDetails.lossPct >= 1 ? 'Warning' : 'Stable'}
-                </strong>
-              </article>
-            </aside>
-
-            <section className="packetloss-right card">
-              <div className="sequence-head">
-                <h3>Sequence Analysis (Pings 1-{rapidCount})</h3>
-                <div className="sequence-legend">
-                  <span className="success">Success</span>
-                  <span className="jitter">Jitter</span>
-                  <span className="failed">Failed</span>
-                </div>
-              </div>
-              <div className="sequence-grid">
-                {rapidDetails.packetStates.map((state, index) => (
-                  <span key={`pkt-${index}`} className={`pkt ${state}`} />
-                ))}
-              </div>
-
-              <section className="diag-log">
-                <h4>Diagnostic Log</h4>
-                <pre className="diag-log-pre">
-                  {rapidDetails.logLines.map((line, index) => (
-                    <div key={`log-${index}`} className={`diag-line ${line.type}`}>
-                      {line.text}
-                    </div>
+                <div className="sequence-grid">
+                  {rapidDetails.packetStates.map((state, index) => (
+                    <span key={`pkt-${index}`} className={`pkt ${state}`} />
                   ))}
-                </pre>
+                </div>
+
+                <section className="diag-log">
+                  <h4>Diagnostic Log</h4>
+                  <pre className="diag-log-pre">
+                    {rapidDetails.logLines.map((line, index) => (
+                      <div key={`log-${index}`} className={`diag-line ${line.type}`}>
+                        {line.text}
+                      </div>
+                    ))}
+                  </pre>
+                </section>
               </section>
             </section>
           </section>
-        </section>
-      ) : null}
+        ) : null}
 
-      {activeTab === 'diagnostics' ? (
-        <section className="diagnostics-hub">
-          <section className="card diagnostics-grid">
-            <article className="diag-card">
-              <h3>TCP Ping (SYN Reachability)</h3>
-              <div className="diag-controls">
-                <input
-                  value={diagnosticsHostInput}
-                  onChange={(e) => setDiagnosticsHostInput(e.target.value)}
-                  onKeyDown={(e) => runOnEnter(e, handleTcpPing)}
-                  placeholder="Enter a hostname"
-                />
-                <input
-                  id="tcpPort"
-                  type="number"
-                  min="1"
-                  max="65535"
-                  value={tcpPort}
-                  onChange={(e) => setTcpPort(Number.parseInt(e.target.value || '443', 10))}
-                  placeholder="443"
-                />
-              </div>
-              <button className="diag-run-btn" onClick={handleTcpPing}>
-                ⚡ Run TCP Ping
-              </button>
-              <pre className="diag-log-pre">{tcpResult ? JSON.stringify(tcpResult, null, 2) : 'No TCP ping result yet.'}</pre>
-            </article>
-
-            <article className="diag-card">
-              <h3>MTR-style (Ping + Trace)</h3>
-              <div className="diag-controls">
-                <input
-                  value={diagnosticsHostInput}
-                  onChange={(e) => setDiagnosticsHostInput(e.target.value)}
-                  onKeyDown={(e) => runOnEnter(e, handleMtrRun)}
-                  placeholder="Enter a hostname"
-                />
-                <input
-                  id="mtrRounds"
-                  type="number"
-                  min="2"
-                  max="30"
-                  value={mtrRounds}
-                  onChange={(e) => setMtrRounds(Number.parseInt(e.target.value || '5', 10))}
-                  placeholder="Rounds"
-                />
-              </div>
-              <button className="diag-run-btn" onClick={handleMtrRun} disabled={mtrLoading}>
-                {mtrLoading ? 'Running...' : '▶ Run MTR-style'}
-              </button>
-              <pre className="diag-log-pre">{mtrResult ? JSON.stringify(mtrResult, null, 2) : 'No MTR result yet.'}</pre>
-            </article>
-
-            <article className="diag-card">
-              <h3>DNS Toolkit</h3>
-              <div className="diag-controls">
-                <input
-                  value={diagnosticsHostInput}
-                  onChange={(e) => setDiagnosticsHostInput(e.target.value)}
-                  onKeyDown={(e) => runOnEnter(e, handleDnsQuery)}
-                  placeholder="Enter a hostname"
-                />
-                <select id="dnsType" value={dnsType} onChange={(e) => setDnsType(e.target.value)}>
-                  <option value="A">Type: A</option>
-                  <option value="AAAA">Type: AAAA</option>
-                  <option value="MX">Type: MX</option>
-                  <option value="NS">Type: NS</option>
-                  <option value="CNAME">Type: CNAME</option>
-                  <option value="PTR">Type: PTR</option>
-                </select>
-              </div>
-              <button className="diag-run-btn" onClick={handleDnsQuery}>
-                ⌕ Run DNS Query
-              </button>
-              <pre className="diag-log-pre">{dnsResult ? JSON.stringify(dnsResult, null, 2) : 'No DNS result yet.'}</pre>
-            </article>
-
-            <article className="diag-card">
-              <h3>Port Scanner Lite</h3>
-              <div className="diag-controls">
-                <input
-                  value={diagnosticsHostInput}
-                  onChange={(e) => setDiagnosticsHostInput(e.target.value)}
-                  onKeyDown={(e) => runOnEnter(e, handlePortScan)}
-                  placeholder="Enter a hostname"
-                />
-                <input
-                  id="portList"
-                  value={portListInput}
-                  onChange={(e) => setPortListInput(e.target.value)}
-                  placeholder="Ports (e.g. 80,443,3389)"
-                />
-              </div>
-              <button className="diag-run-btn" onClick={handlePortScan}>
-                ◎ Run Port Scan
-              </button>
-              <pre className="diag-log-pre">{portScanResult ? JSON.stringify(portScanResult, null, 2) : 'No port scan result yet.'}</pre>
-            </article>
-          </section>
-        </section>
-      ) : null}
-
-      {activeTab === 'whois' ? (
-        <section className="whois-page">
-          <div className="whois-head">
-            <p className="whois-breadcrumb">Tools &gt; WHOIS Lookup</p>
-            <h2>WHOIS Registry Lookup</h2>
-            <p className="subtitle">Query global domain registration records and ownership data</p>
-          </div>
-
-          <section className="card whois-search-card">
-            <div className="whois-search-wrap">
-              <span className="whois-icon" aria-hidden="true">
-                ⌕
-              </span>
-              <input
-                id="whoisDomain"
-                value={whoisInput}
-                onChange={(e) => setWhoisInput(e.target.value)}
-                onKeyDown={(e) => runOnEnter(e, handleWhoisLookup)}
-                placeholder="Enter a hostname"
-              />
-              <button className="whois-primary" onClick={handleWhoisLookup} disabled={whoisLoading || !hasWhoisApiKey}>
-                {whoisLoading ? 'Running...' : 'WHOIS Lookup'}
-              </button>
-            </div>
-            {hasWhoisApiKey ? null : (
-              <p className="empty">WHOIS lookup disabled. Add your Apilayer API key in Settings to enable this action.</p>
-            )}
-          </section>
-
-          <section className="card whois-result-card">
-            <div className="whois-result-head">
-              <div className="terminal-dots" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </div>
-              <p>Query Result: {whoisPresentation.queryDomain || whoisInput || 'N/A'}</p>
-              <div className="whois-result-actions">
-                <button className="secondary" onClick={handleCopyWhois} disabled={!whoisData}>
-                  Copy Results
+        {activeTab === 'diagnostics' ? (
+          <section className="diagnostics-hub">
+            <section className="card diagnostics-grid">
+              <article className="diag-card">
+                <h3>TCP Ping (SYN Reachability)</h3>
+                <div className="diag-controls">
+                  <input
+                    value={tcpHostInput}
+                    onChange={(e) => setTcpHostInput(e.target.value)}
+                    onKeyDown={(e) => runOnEnter(e, handleTcpPing)}
+                    placeholder="Enter a hostname"
+                  />
+                  <input
+                    id="tcpPort"
+                    type="number"
+                    min="1"
+                    max="65535"
+                    value={tcpPort}
+                    onChange={(e) => setTcpPort(Number.parseInt(e.target.value || '443', 10))}
+                    placeholder="443"
+                  />
+                </div>
+                <button className="diag-run-btn" onClick={handleTcpPing}>
+                  ⚡ Run TCP Ping
                 </button>
-                <button className="secondary" onClick={handleExportWhoisTxt} disabled={!whoisData}>
-                  Export TXT
+                <pre className="diag-log-pre">{tcpResult ? JSON.stringify(tcpResult, null, 2) : 'No TCP ping result yet.'}</pre>
+              </article>
+
+              <article className="diag-card">
+                <h3>MTR-style (Ping + Trace)</h3>
+                <div className="diag-controls">
+                  <input
+                    value={mtrHostInput}
+                    onChange={(e) => setMtrHostInput(e.target.value)}
+                    onKeyDown={(e) => runOnEnter(e, handleMtrRun)}
+                    placeholder="Enter a hostname"
+                  />
+                  <input
+                    id="mtrRounds"
+                    type="number"
+                    min="2"
+                    max="30"
+                    value={mtrRounds}
+                    onChange={(e) => setMtrRounds(Number.parseInt(e.target.value || '5', 10))}
+                    placeholder="Rounds"
+                  />
+                </div>
+                <button className="diag-run-btn" onClick={handleMtrRun} disabled={mtrLoading}>
+                  {mtrLoading ? 'Running...' : '▶ Run MTR-style'}
                 </button>
-              </div>
+                <pre className="diag-log-pre">{mtrResult ? JSON.stringify(mtrResult, null, 2) : 'No MTR result yet.'}</pre>
+              </article>
+
+              <article className="diag-card">
+                <h3>DNS Toolkit</h3>
+                <div className="diag-controls">
+                  <input
+                    value={dnsHostInput}
+                    onChange={(e) => setDnsHostInput(e.target.value)}
+                    onKeyDown={(e) => runOnEnter(e, handleDnsQuery)}
+                    placeholder="Enter a hostname"
+                  />
+                  <select id="dnsType" value={dnsType} onChange={(e) => setDnsType(e.target.value)}>
+                    <option value="A">Type: A</option>
+                    <option value="AAAA">Type: AAAA</option>
+                    <option value="MX">Type: MX</option>
+                    <option value="NS">Type: NS</option>
+                    <option value="CNAME">Type: CNAME</option>
+                    <option value="PTR">Type: PTR</option>
+                  </select>
+                </div>
+                <button className="diag-run-btn" onClick={handleDnsQuery}>
+                  ⌕ Run DNS Query
+                </button>
+                <pre className="diag-log-pre">{dnsResult ? JSON.stringify(dnsResult, null, 2) : 'No DNS result yet.'}</pre>
+              </article>
+
+              <article className="diag-card">
+                <h3>Port Scanner Lite</h3>
+                <div className="diag-controls">
+                  <input
+                    value={portScanHostInput}
+                    onChange={(e) => setPortScanHostInput(e.target.value)}
+                    onKeyDown={(e) => runOnEnter(e, handlePortScan)}
+                    placeholder="Enter a hostname"
+                  />
+                  <input
+                    id="portList"
+                    value={portListInput}
+                    onChange={(e) => setPortListInput(e.target.value)}
+                    placeholder="Ports (e.g. 80,443,3389)"
+                  />
+                </div>
+                <button className="diag-run-btn" onClick={handlePortScan}>
+                  ◎ Run Port Scan
+                </button>
+                <pre className="diag-log-pre">{portScanResult ? JSON.stringify(portScanResult, null, 2) : 'No port scan result yet.'}</pre>
+              </article>
+            </section>
+          </section>
+        ) : null}
+
+        {activeTab === 'whois' ? (
+          <section className="whois-page">
+            <div className="whois-head">
+              <p className="whois-breadcrumb">Tools &gt; WHOIS Lookup</p>
+              <h2>WHOIS Registry Lookup</h2>
+              <p className="subtitle">Query global domain registration records and ownership data</p>
             </div>
 
-            <pre className="whois-terminal">
-              {whoisData ? (
-                whoisPresentation.lines.map((line, index) => {
-                  if (line.type === 'blank') return <div key={`line-${index}`}>&nbsp;</div>;
-                  if (line.type === 'comment') {
-                    return (
-                      <div key={`line-${index}`} className="whois-comment">
-                        {line.value}
-                      </div>
-                    );
-                  }
-                  if (line.type === 'section') {
-                    return (
-                      <div key={`line-${index}`} className="whois-section">
-                        {line.value}
-                      </div>
-                    );
-                  }
-                  const isLink = /^https?:\/\//i.test(line.value);
-                  return (
-                    <div key={`line-${index}`}>
-                      <span className="whois-label">{line.label}:</span>{' '}
-                      <span className={isLink ? 'whois-link' : 'whois-value'}>{line.value}</span>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="whois-comment"># Run a WHOIS lookup to display parsed results.</div>
+            <section className="card whois-search-card">
+              <div className="whois-search-wrap">
+                <span className="whois-icon" aria-hidden="true">
+                  ⌕
+                </span>
+                <input
+                  id="whoisDomain"
+                  value={whoisInput}
+                  onChange={(e) => setWhoisInput(e.target.value)}
+                  onKeyDown={(e) => runOnEnter(e, handleWhoisLookup)}
+                  placeholder="Enter a hostname"
+                />
+                <button className="whois-primary" onClick={handleWhoisLookup} disabled={whoisLoading || !hasWhoisApiKey}>
+                  {whoisLoading ? 'Running...' : 'WHOIS Lookup'}
+                </button>
+              </div>
+              {hasWhoisApiKey ? null : (
+                <p className="empty">WHOIS lookup disabled. Add your Apilayer API key in Settings to enable this action.</p>
               )}
-            </pre>
+            </section>
+
+            <section className="card whois-result-card">
+              <div className="whois-result-head">
+                <div className="terminal-dots" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <p>Query Result: {whoisPresentation.queryDomain || whoisInput || 'N/A'}</p>
+                <div className="whois-result-actions">
+                  <button className="secondary" onClick={handleCopyWhois} disabled={!whoisData}>
+                    Copy Results
+                  </button>
+                  <button className="secondary" onClick={handleExportWhoisTxt} disabled={!whoisData}>
+                    Export TXT
+                  </button>
+                </div>
+              </div>
+
+              <pre className="whois-terminal">
+                {whoisData ? (
+                  whoisPresentation.lines.map((line, index) => {
+                    if (line.type === 'blank') return <div key={`line-${index}`}>&nbsp;</div>;
+                    if (line.type === 'comment') {
+                      return (
+                        <div key={`line-${index}`} className="whois-comment">
+                          {line.value}
+                        </div>
+                      );
+                    }
+                    if (line.type === 'section') {
+                      return (
+                        <div key={`line-${index}`} className="whois-section">
+                          {line.value}
+                        </div>
+                      );
+                    }
+                    const isLink = /^https?:\/\//i.test(line.value);
+                    return (
+                      <div key={`line-${index}`}>
+                        <span className="whois-label">{line.label}:</span>{' '}
+                        <span className={isLink ? 'whois-link' : 'whois-value'}>{line.value}</span>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="whois-comment"># Run a WHOIS lookup to display parsed results.</div>
+                )}
+              </pre>
+            </section>
           </section>
-        </section>
-      ) : null}
+        ) : null}
 
-      {activeTab === 'settings' ? (
-        <section className="card settings-panel">
-          <h2>Settings</h2>
-          <p className="empty">Store your Apilayer key locally for WHOIS requests.</p>
-          <label htmlFor="apiKey">Apilayer API Key</label>
-          <input
-            id="apiKey"
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Enter your WHOIS API key"
-          />
-          <button onClick={handleSaveApiKey}>Save API Key</button>
-        </section>
-      ) : null}
+        {activeTab === 'settings' ? (
+          <section className="card settings-panel">
+            <h2>Settings</h2>
+            <p className="empty">Store your Apilayer key locally for WHOIS requests.</p>
+            <label htmlFor="apiKey">Apilayer API Key</label>
+            <input
+              id="apiKey"
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Enter your WHOIS API key"
+            />
+            <button onClick={handleSaveApiKey}>Save API Key</button>
+          </section>
+        ) : null}
 
-      <footer className="status-bar">
-        <span>{status}</span>
-        <span className="app-attribution">NetPulse by Gabriel Chavez • Made in Mexico with love.</span>
-      </footer>
+        <footer className="attribution-footer">
+          NetPulse by Gabriel Chavez • Developed in Mexico with love
+        </footer>
       </div>
     </main>
   );
