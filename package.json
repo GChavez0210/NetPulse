@@ -39,6 +39,9 @@
       "electron/**/*",
       "package.json"
     ],
+    "extraResources": [
+      "oui-database.sqlite"
+    ],
     "win": {
       "icon": "netpulse_icon.ico",
       "target": [

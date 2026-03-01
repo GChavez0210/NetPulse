@@ -916,10 +916,33 @@ pre,
   padding: 0;
   max-height: 260px;
   background: transparent;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .diagnostics-grid {
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 900px) {
+  .diagnostics-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.identity-grid {
+  display: flex;
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-xl);
+  align-items: flex-start;
+}
+
+@media (max-width: 900px) {
+  .identity-grid {
+    flex-direction: column;
+  }
 }
 
 .diag-card {

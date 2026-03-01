@@ -25,7 +25,12 @@ contextBridge.exposeInMainWorld('networkAPI', {
   runMtr: (host, rounds) => ipcRenderer.invoke('mtr:run', host, rounds),
   queryDns: (domain, recordType) => ipcRenderer.invoke('dns:query', domain, recordType),
   runPortScan: (host, ports, timeoutMs) => ipcRenderer.invoke('portscan:run', host, ports, timeoutMs),
-  lookupWhois: (domain, apiKey) => ipcRenderer.invoke('whois:lookup', domain, apiKey),
-  saveApiKey: (apiKey) => ipcRenderer.invoke('settings:setApiKey', apiKey),
-  getApiKey: () => ipcRenderer.invoke('settings:getApiKey')
+  lookupWhois: (domain) => ipcRenderer.invoke('whois:lookup', domain),
+
+  // Phase 6 Extensions
+  validateDns: (domain) => ipcRenderer.invoke('dns:validate', domain),
+  healthCheckDns: (domain) => ipcRenderer.invoke('dns:health', domain),
+  validateDmarc: (domain) => ipcRenderer.invoke('dns:dmarc', domain),
+  lookupIdentity: (query) => ipcRenderer.invoke('identity:lookup', query),
+  lookupMac: (mac) => ipcRenderer.invoke('identity:macLookup', mac)
 });

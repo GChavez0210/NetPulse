@@ -6,6 +6,11 @@ const net = require('net');
 const dns = require('dns');
 const { spawn } = require('child_process');
 
+// Phase 6 Plugins
+const { validateDns, healthCheckDns, validateDmarc } = require('./dnsTools');
+const { orchestrateWhoisFallback } = require('./rdapWhois');
+const { lookupMac } = require('./macOui');
+
 let mainWindow;
 const FLOOD_MIN_INTERVAL_MS = 200;
 const FLOOD_DEFAULT_INTERVAL_MS = 500;
@@ -185,15 +190,15 @@ function runSinglePing(host, options = {}) {
       process.platform === 'win32'
         ? ['-n', '1', '-w', '1000', ...(dontFragment ? ['-f'] : []), '-l', String(size), host]
         : [
-            '-c',
-            '1',
-            '-W',
-            '1',
-            '-s',
-            String(Math.max(size - 8, 0)),
-            ...(dontFragment && process.platform === 'linux' ? ['-M', 'do'] : []),
-            host
-          ];
+          '-c',
+          '1',
+          '-W',
+          '1',
+          '-s',
+          String(Math.max(size - 8, 0)),
+          ...(dontFragment && process.platform === 'linux' ? ['-M', 'do'] : []),
+          host
+        ];
     const child = spawn('ping', args, { shell: false });
 
     let output = '';
@@ -908,24 +913,31 @@ app.whenReady().then(() => {
     return runPortScan(host, ports, timeoutMs);
   });
 
-  ipcMain.handle('settings:setApiKey', async (_event, apiKey) => {
-    const settings = readSettings();
-    settings.whoisApiKey = encryptString(String(apiKey || ''));
-    writeSettings(settings);
-    return { ok: true };
+  ipcMain.handle('whois:lookup', async (_event, domain) => {
+    return runWhoisLookup(domain);
   });
 
-  ipcMain.handle('settings:getApiKey', async () => {
-    const settings = readSettings();
-    const encryptedApiKey = settings.whoisApiKey || '';
-    return decryptString(encryptedApiKey);
+  // --- Phase 6: DNS Actions ---
+  ipcMain.handle('dns:validate', async (event, domain) => {
+    return validateDns(domain);
   });
 
-  ipcMain.handle('whois:lookup', async (_event, domain, apiKeyInput) => {
-    const settings = readSettings();
-    const savedApiKey = decryptString(settings.whoisApiKey || '');
-    const apiKey = String(apiKeyInput || '').trim() || savedApiKey;
-    return runWhoisLookup(domain, apiKey);
+  ipcMain.handle('dns:health', async (event, domain) => {
+    return healthCheckDns(domain);
+  });
+
+  ipcMain.handle('dns:dmarc', async (event, domain) => {
+    return validateDmarc(domain);
+  });
+
+  // --- Phase 6: Identity Actions ---
+  ipcMain.handle('identity:lookup', async (event, query) => {
+    // 1. Fallback Pipeline (RDAP -> raw port 43)
+    return orchestrateWhoisFallback(query);
+  });
+
+  ipcMain.handle('identity:macLookup', async (event, mac) => {
+    return lookupMac(mac);
   });
 
   app.on('activate', () => {

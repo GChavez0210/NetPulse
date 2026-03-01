@@ -1,123 +1,75 @@
-# NetPulse v0.1.2 (Electron + React + Vite)
+# NetPulse v0.1.2
 
-Fast, focused network troubleshooting.
+<p align="center">
+  <img src="NetPulse-logo.png" alt="NetPulse Logo" width="250">
+</p>
 
-## Overview
+NetPulse is a blazing-fast, strictly local network diagnostics suite built with Electron, React, and Vite. It directly interfaces with your operating system's native networking stack (raw sockets, ICMP binaries, and TCP wrappers) to deliver precise, dependency-free telemetry directly to a modern, dark-mode desktop interface.
 
-NetPulse is a desktop diagnostics suite with real-time monitoring and utility modules:
+## 🚀 Features
 
-- Multi-target ping dashboard with live sparkline charts
-- Packet loss test with streaming sequence map and diagnostic log
-- Traceroute with parsed hop analysis and CSV export
-- Dedicated diagnostics hub:
-  - TCP ping (SYN/connect reachability)
-  - MTR-style multi-round hop analysis
-  - DNS toolkit (local vs Google resolver)
-  - Port scanner lite
-- WHOIS lookup via Apilayer with local API key storage
-- Dark/Light mode toggle
+### Multi-Target Ping
+* **Live Dashboards:** Add and monitor multiple hosts simultaneously via ICMP using interactive sparkline charts.
+* **Granular Control:** Toggle packet sizes, DF (Don't Fragment) flags, and bulk-load IP lists.
+* **Latency Matrix:** High-level overview of global packet loss, p50/p95/p99 jitter percentiles, and current node health.
 
-## Requirements
+### Flood Test
+* **Stress Diagnostics:** Execute high-frequency ICMP pacing tests (100 to 1000 pings) to isolate unstable network links.
+* **Sequence Mapping:** Visual hit/miss/jitter sequence grid to quickly spot packet drop clusters.
+* **Deep Metrics:** Calculates maximum loss streaks, average RTT, and evaluates severity thresholds.
 
-- Node.js 18+
-- npm
+### Network Topology (Trace)
+* **Visual Traceroute:** Parses system traceroute data on the fly, rendering individual hops with their respective IPs and status bars.
+* **CSV Export:** Save topology reports to disk for external auditing.
 
-## Run
+### Advanced Analytics
+* **TCP Ping (SYN Reachability):** Bypass ICMP blocks by probing specific TCP ports directly.
+* **MTR-Style Analysis:** Multi-round hop-by-hop latency and packet loss synthesis.
+* **Port Scanner Lite:** Quickly interrogate common ports (e.g., 22, 80, 443, 3389) across any edge node.
+* **DNS Toolkit:** 
+  * *DNS Validation:* Query specific types (A, AAAA, MX, NS, CNAME, PTR).
+  * *Split-Horizon Health:* Concurrently interrogate 1.1.1.1, 8.8.8.8, and local OS resolvers to detect DNS poisoning or caching mismatch.
+  * *DMARC Inspector:* Fetch and validate email security TXT records.
 
-Install dependencies:
+### Registry & Hardware Identity
+* **Multi-Tier WHOIS:** 100% API-free. Queries international registration databases using an internal RDAP HTTPS pipeline, automatically falling back to raw Port 43 TCP socket streams if RDAP fails.
+* **MAC OUI Matcher:** Millisecond-level hardware manufacturer lookups leveraging an embedded, highly optimized native SQLite (`vendordb`) table running directly on the filesystem.
 
-```bash
-npm install
-```
+## ⚙️ Architecture & Security
 
-Development mode:
+- `contextIsolation: true` & `nodeIntegration: false`: Strict boundary separation between the Node backend and React frontend via IPC Context Bridge.
+- **Dependency-Free Networking:** Uses Zero external API keys. All network operations (aside from WHOIS HTTPS RDAP) are executed locally via Node's `child_process`, `net`, `dgram`, and `dns` standard libraries.
 
-```bash
-npm run dev
-```
+## 💻 Installation & Build Instructions
 
-## Build
+### Prerequisites
+* Node.js 18+
+* npm or yarn
 
+### Development
+1. Clone the repository and install dependencies:
+   ```bash
+   npm install
+   ```
+2. Spin up the Vite dev server and Electron shell:
+   ```bash
+   npm run dev
+   ```
+
+### Production Build
+Compile a standalone executable via `electron-builder` for your operating system:
 ```bash
 npm run build
 ```
 
-Build output:
+**Build Output:**
+* `/dist`: Frontend React bundle.
+* `/release`: Executable installer `.exe` / `.dmg` (depending on the build environment platform).
 
-- `dist/` renderer assets
-- `release/` packaged desktop artifacts
+*Bundling notes:* The `oui-database.sqlite` relies on SQLite native bindings and is automatically parsed into `extraResources` alongside the ASAR archive for production deployment. Windows target architectures explicitly include `x64` and `arm64`.
 
-Windows packaging is configured for both:
+## 📄 License
+MIT. See `LICENSE` for more information.
 
-- `x64`
-- `arm64`
-
-The official app/installer icon is `netpulse_icon.ico`.
-
-## Main Tabs
-
-- `Ping Tests`
-  - Single-IP or Bulk-IP entry mode toggle
-  - Session rate limiting and duplicate target protection
-  - Packet size and DF controls
-  - p50/p95/p99/stddev metrics
-  - timeline markers for down/recovery transitions
-  - multi-target latency matrix
-- `Packet Loss Check`
-  - live sequence grid (success/jitter/failed)
-  - loss donut + metrics stack
-  - streaming diagnostic log
-- `Traceroute`
-  - hop cards, status bars, summary stats
-  - rerun/export CSV actions
-- `Diagnostics`
-  - dedicated diagnostics target input (separate from Ping tab)
-  - TCP ping, MTR-style, DNS toolkit, port scan
-- `WHOIS Lookup`
-  - structured terminal-style result
-  - copy/export actions
-- `Settings`
-  - local WHOIS API key persistence
-
-## IPC Channels
-
-- `ping:run`
-- `ping:sample`
-- `ping:floodStart`
-- `ping:floodSample`
-- `ping:floodDone`
-- `ping:floodStatus`
-- `ping:floodCancel`
-- `trace:run`
-- `tcp:ping`
-- `mtr:run`
-- `dns:query`
-- `portscan:run`
-- `whois:lookup`
-- `settings:setApiKey`
-- `settings:getApiKey`
-
-## Security Notes
-
-- `contextIsolation: true`
-- `nodeIntegration: false`
-- Host validation before command execution
-- Uses Electron `safeStorage` for API key encryption when available
-
-## Third-Party Service Disclaimer
-
-NetPulse integrates with the Apilayer WHOIS API (`https://api.apilayer.com/whois/query`) to retrieve WHOIS and domain registration data when a valid API key is configured by the user.
-
-NetPulse does not store, proxy, or resell WHOIS data beyond local caching for performance purposes. All WHOIS queries are performed directly from the user's local application to the external API provider.
-
-Use of the WHOIS functionality is subject to the terms, conditions, rate limits, and availability of the respective third-party service provider. Users are responsible for:
-
-- Obtaining and maintaining their own API key
-- Complying with the provider's Terms of Service
-- Managing API usage and associated costs
-
-NetPulse is not affiliated with, endorsed by, or sponsored by Apilayer or any other WHOIS data provider. Service interruptions, data accuracy, or API changes are outside the control of this application.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+---
+*NetPulse by Gabriel Chavez • Developed in Mexico with love*

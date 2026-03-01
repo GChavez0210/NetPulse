@@ -46,13 +46,6 @@ const TABS = [
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a855f7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
     )
-  },
-  {
-    id: 'settings',
-    label: 'Configurations',
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-    )
   }
 ];
 
@@ -188,9 +181,21 @@ function listValue(value) {
   return [];
 }
 
-function buildWhoisPresentation(data, domain) {
-  const payload = data && typeof data === 'object' ? data : {};
-  const queryDomain = pickValue(payload, ['domain_name', 'domain', 'domainName'], domain || 'unknown');
+function buildWhoisPresentation(dataWrapper, domain) {
+  // If this is a raw text fallback (like Port 43 WHOIS), just dump the raw text directly.
+  const isRawFallback = dataWrapper?.source && dataWrapper?.source.startsWith('WHOIS (');
+  if (isRawFallback && dataWrapper.raw) {
+    return {
+      text: dataWrapper.raw,
+      queryDomain: domain || 'unknown'
+    };
+  }
+
+  // Extract the actual payload from our Phase 6 wrapper, or use the wrapper itself if old format
+  const payload = dataWrapper?.data || dataWrapper?.normalized || dataWrapper || {};
+  const isFallback = !!dataWrapper?.normalized;
+
+  const queryDomain = pickValue(payload, ['domain_name', 'domain', 'domainName', 'name'], domain || 'unknown');
 
   const domainInfo = [
     ['Domain Name', queryDomain],
@@ -248,9 +253,9 @@ function buildWhoisPresentation(data, domain) {
 
   const text = lines
     .map((line) => {
+      if (line.type === 'kv') return `${line.label.padEnd(25)}: ${line.value}`;
       if (line.type === 'blank') return '';
-      if (line.type === 'comment' || line.type === 'section') return line.value;
-      return `${line.label}: ${line.value}`;
+      return line.value;
     })
     .join('\n');
 
@@ -384,7 +389,7 @@ function App() {
   const [floodHostInput, setFloodHostInput] = useState('');
 
   const [bulkHostsInput, setBulkHostsInput] = useState('');
-  const [whoisInput, setWhoisInput] = useState('google.com');
+  const [whoisInput, setWhoisInput] = useState('');
   const [tests, setTests] = useState([]);
   const [rapidCount, setRapidCount] = useState(100);
   const [rapidRunning, setRapidRunning] = useState(false);
@@ -425,25 +430,35 @@ function App() {
   const [dontFragment, setDontFragment] = useState(false);
   const [whoisData, setWhoisData] = useState(null);
   const [whoisLoading, setWhoisLoading] = useState(false);
-  const [apiKey, setApiKey] = useState('');
   const [status, setStatus] = useState('Ready.');
+
+  // Phase 6 Tools State
+  const [dnsValInput, setDnsValInput] = useState('');
+  const [dnsValLoading, setDnsValLoading] = useState(false);
+  const [dnsValResult, setDnsValResult] = useState(null);
+
+  const [dnsHealthInput, setDnsHealthInput] = useState('');
+  const [dnsHealthLoading, setDnsHealthLoading] = useState(false);
+  const [dnsHealthResult, setDnsHealthResult] = useState(null);
+
+  const [dmarcInput, setDmarcInput] = useState('');
+  const [dmarcLoading, setDmarcLoading] = useState(false);
+  const [dmarcResult, setDmarcResult] = useState(null);
+
+  const [macInput, setMacInput] = useState('');
+  const [macLoading, setMacLoading] = useState(false);
+  const [macResult, setMacResult] = useState(null);
 
   const timersRef = useRef(new Map());
   const inFlightRef = useRef(new Set());
   const testsRef = useRef(tests);
   const whoisPresentation = useMemo(() => buildWhoisPresentation(whoisData, whoisInput.trim()), [whoisData, whoisInput]);
-  const hasWhoisApiKey = apiKey.trim().length > 0;
 
   useEffect(() => {
     testsRef.current = tests;
   }, [tests]);
 
   useEffect(() => {
-    window.networkAPI
-      .getApiKey()
-      .then((storedKey) => setApiKey(storedKey || ''))
-      .catch(() => setStatus('Could not load the saved API key.'));
-
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
       Notification.requestPermission().catch(() => { });
     }
@@ -1038,19 +1053,12 @@ function App() {
     }
   };
 
-  const handleSaveApiKey = async () => {
-    await window.networkAPI.saveApiKey(apiKey);
-    setStatus('API key saved locally.');
-  };
+
 
   const handleWhoisLookup = async () => {
     const domain = whoisInput.trim();
     if (!domain) {
       setStatus('Enter a domain or IP for WHOIS.');
-      return;
-    }
-    if (!hasWhoisApiKey) {
-      setStatus('WHOIS API key is required. Add it in Settings.');
       return;
     }
 
@@ -1059,10 +1067,15 @@ function App() {
     setStatus(`Running WHOIS lookup for ${domain}...`);
 
     try {
-      const result = await window.networkAPI.lookupWhois(domain, apiKey);
+      const result = await window.networkAPI.lookupIdentity(domain);
       if (result.ok) {
-        setWhoisData(result.data ?? {});
-        setStatus(`WHOIS lookup complete for ${domain}.`);
+        setWhoisData({
+          normalized: result.normalized,
+          raw: result.raw,
+          source: result.source || 'Apilayer',
+          data: result.data // Preserve original apilayer data if present
+        });
+        setStatus(`WHOIS lookup complete for ${domain} via ${result.source || 'Apilayer'}.`);
         setWhoisInput('');
       } else {
         setWhoisData(result.data ?? { error: result.error });
@@ -1106,6 +1119,93 @@ function App() {
     setStatus('WHOIS TXT exported.');
   };
 
+  // --- Phase 6 Specific Handlers ---
+  const handleDnsValidate = async () => {
+    const target = dnsValInput.trim();
+    if (!target) return;
+    setDnsValLoading(true);
+    setDnsValResult(null);
+    setStatus(`Validating DNS configuration for ${target}...`);
+    try {
+      const res = await window.networkAPI.validateDns(target);
+      setDnsValResult(res);
+      setStatus(res.ok ? 'DNS Validation complete.' : 'DNS Validation failed.');
+      if (res.ok) setDnsValInput('');
+    } catch (e) {
+      setDnsValResult({ ok: false, error: e.message });
+      setStatus('DNS Validation runtime error.');
+    } finally {
+      setDnsValLoading(false);
+    }
+  };
+
+  const handleDnsHealth = async () => {
+    const target = dnsHealthInput.trim();
+    if (!target) return;
+    setDnsHealthLoading(true);
+    setDnsHealthResult(null);
+    setStatus(`Running Multi-Resolver check for ${target}...`);
+    try {
+      const res = await window.networkAPI.healthCheckDns(target);
+      setDnsHealthResult(res);
+      setStatus(res.ok ? 'Multi-Resolver Health Check complete.' : 'Health check failed.');
+      if (res.ok) setDnsHealthInput('');
+    } catch (e) {
+      setDnsHealthResult({ ok: false, error: e.message });
+      setStatus('Health Check runtime error.');
+    } finally {
+      setDnsHealthLoading(false);
+    }
+  };
+
+  const handleDmarcValidate = async () => {
+    const target = dmarcInput.trim();
+    if (!target) return;
+    setDmarcLoading(true);
+    setDmarcResult(null);
+    setStatus(`Validating DMARC records for ${target}...`);
+    try {
+      const res = await window.networkAPI.validateDmarc(target);
+      setDmarcResult(res);
+      setStatus(res.ok ? 'DMARC validation complete.' : 'DMARC validation failed.');
+      if (res.ok) setDmarcInput('');
+    } catch (e) {
+      setDmarcResult({ ok: false, error: e.message });
+      setStatus('DMARC validation runtime error.');
+    } finally {
+      setDmarcLoading(false);
+    }
+  };
+
+  const handleMacLookup = async () => {
+    const target = macInput.trim();
+    if (!target) return;
+    setMacLoading(true);
+    setMacResult(null);
+    setStatus('Looking up hardware database...');
+    try {
+      const res = await window.networkAPI.lookupMac(target);
+      setMacResult(res);
+      setStatus(res.ok ? 'MAC lookup complete.' : 'MAC lookup failed.');
+      if (res.ok) setMacInput('');
+    } catch (e) {
+      setMacResult({ ok: false, error: e.message });
+      setStatus('MAC lookup runtime error.');
+    } finally {
+      setMacLoading(false);
+    }
+  };
+
+  const handleCopyPhase6Raw = async (text) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setStatus('Raw output copied to clipboard.');
+    } catch {
+      setStatus('Failed to copy text.');
+    }
+  };
+
   return (
     <main className="app-shell">
       <aside className="sidebar">
@@ -1114,9 +1214,6 @@ function App() {
             <img className="brand-logo" src={netPulseLogo} alt="NetPulse" />
             <span className="version-badge">v0.1.2</span>
           </div>
-          <p className="subtitle" style={{ fontSize: '0.8rem', marginTop: '12px', lineHeight: '1.4' }}>
-            Fast, focused network troubleshooting.
-          </p>
         </div>
         <div className="tabs-bar">
           {TABS.map((tab) => (
@@ -1138,7 +1235,6 @@ function App() {
             <section className="ping-topbar">
               <div>
                 <h2>Multi-Target Ping</h2>
-                <p className="subtitle">Real-time latency monitoring across infrastructure</p>
               </div>
               <div className="ping-actions">
                 <div className="entry-toggle">
@@ -1429,7 +1525,6 @@ function App() {
           <section className="packetloss-page">
             <div className="packetloss-head">
               <h2>Packet Loss Test</h2>
-              <p className="subtitle">Real-time network stability diagnostic for node {floodHostInput || 'N/A'}</p>
             </div>
             <section className="packetloss-controls">
               <input
@@ -1637,106 +1732,185 @@ function App() {
                 </button>
                 <pre className="diag-log-pre">{portScanResult ? JSON.stringify(portScanResult, null, 2) : 'No port scan result yet.'}</pre>
               </article>
+
+              {/* PHASE 6 ADDITIONS */}
+              <article className="diag-card">
+                <h3>DNS Validation</h3>
+                <div className="diag-controls">
+                  <input
+                    value={dnsValInput}
+                    onChange={(e) => setDnsValInput(e.target.value)}
+                    onKeyDown={(e) => runOnEnter(e, handleDnsValidate)}
+                    placeholder="Enter a hostname"
+                  />
+                </div>
+                <button className="diag-run-btn" onClick={handleDnsValidate} disabled={dnsValLoading}>
+                  {dnsValLoading ? 'Validating...' : '✓ Validate Configuration'}
+                </button>
+                <div className="diag-result-container" style={{ position: 'relative' }}>
+                  <pre className="diag-log-pre">
+                    {dnsValResult ? (
+                      dnsValResult.rawOutput || JSON.stringify(dnsValResult, null, 2)
+                    ) : (
+                      'No DNS Validation result yet.'
+                    )}
+                  </pre>
+                  {dnsValResult && dnsValResult.rawOutput && (
+                    <button className="copy-sm-btn" onClick={() => handleCopyPhase6Raw(dnsValResult.rawOutput)}>
+                      Copy
+                    </button>
+                  )}
+                </div>
+              </article>
+
+              <article className="diag-card">
+                <h3>Multi-Resolver Health (Split DNS)</h3>
+                <div className="diag-controls">
+                  <input
+                    value={dnsHealthInput}
+                    onChange={(e) => setDnsHealthInput(e.target.value)}
+                    onKeyDown={(e) => runOnEnter(e, handleDnsHealth)}
+                    placeholder="Enter a hostname"
+                  />
+                </div>
+                <button className="diag-run-btn" onClick={handleDnsHealth} disabled={dnsHealthLoading}>
+                  {dnsHealthLoading ? 'Checking...' : '✓ Compare Resolvers'}
+                </button>
+                <div className="diag-result-container" style={{ position: 'relative' }}>
+                  <pre className="diag-log-pre">
+                    {dnsHealthResult ? (
+                      dnsHealthResult.rawOutput || JSON.stringify(dnsHealthResult, null, 2)
+                    ) : (
+                      'No Multi-Resolver result yet.'
+                    )}
+                  </pre>
+                  {dnsHealthResult && dnsHealthResult.rawOutput && (
+                    <button className="copy-sm-btn" onClick={() => handleCopyPhase6Raw(dnsHealthResult.rawOutput)}>
+                      Copy
+                    </button>
+                  )}
+                </div>
+              </article>
+
+              <article className="diag-card">
+                <h3>DMARC Inspector</h3>
+                <div className="diag-controls">
+                  <input
+                    value={dmarcInput}
+                    onChange={(e) => setDmarcInput(e.target.value)}
+                    onKeyDown={(e) => runOnEnter(e, handleDmarcValidate)}
+                    placeholder="Enter a hostname"
+                  />
+                </div>
+                <button className="diag-run-btn" onClick={handleDmarcValidate} disabled={dmarcLoading}>
+                  {dmarcLoading ? 'Inspecting...' : '✓ Inspect Records'}
+                </button>
+                <div className="diag-result-container" style={{ position: 'relative' }}>
+                  <pre className="diag-log-pre">
+                    {dmarcResult ? (
+                      dmarcResult.rawOutput || JSON.stringify(dmarcResult, null, 2)
+                    ) : (
+                      'No DMARC validation result yet.'
+                    )}
+                  </pre>
+                  {dmarcResult && dmarcResult.rawOutput && (
+                    <button className="copy-sm-btn" onClick={() => handleCopyPhase6Raw(dmarcResult.rawOutput)}>
+                      Copy
+                    </button>
+                  )}
+                </div>
+              </article>
             </section>
           </section>
         ) : null}
-
         {activeTab === 'whois' ? (
           <section className="whois-page">
             <div className="whois-head">
-              <p className="whois-breadcrumb">Tools &gt; WHOIS Lookup</p>
-              <h2>WHOIS Registry Lookup</h2>
-              <p className="subtitle">Query global domain registration records and ownership data</p>
+              <p className="whois-breadcrumb">Tools &gt; Identity & WHOIS</p>
+              <h2>Registry & Hardware Identity</h2>
             </div>
 
-            <section className="card whois-search-card">
-              <div className="whois-search-wrap">
-                <span className="whois-icon" aria-hidden="true">
-                  ⌕
-                </span>
-                <input
-                  id="whoisDomain"
-                  value={whoisInput}
-                  onChange={(e) => setWhoisInput(e.target.value)}
-                  onKeyDown={(e) => runOnEnter(e, handleWhoisLookup)}
-                  placeholder="Enter a hostname"
-                />
-                <button className="whois-primary" onClick={handleWhoisLookup} disabled={whoisLoading || !hasWhoisApiKey}>
-                  {whoisLoading ? 'Running...' : 'WHOIS Lookup'}
-                </button>
-              </div>
-              {hasWhoisApiKey ? null : (
-                <p className="empty">WHOIS lookup disabled. Add your Apilayer API key in Settings to enable this action.</p>
-              )}
-            </section>
-
-            <section className="card whois-result-card">
-              <div className="whois-result-head">
-                <div className="terminal-dots" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                </div>
-                <p>Query Result: {whoisPresentation.queryDomain || whoisInput || 'N/A'}</p>
-                <div className="whois-result-actions">
-                  <button className="secondary" onClick={handleCopyWhois} disabled={!whoisData}>
-                    Copy Results
-                  </button>
-                  <button className="secondary" onClick={handleExportWhoisTxt} disabled={!whoisData}>
-                    Export TXT
+            <div className="identity-grid">
+              <section className="card whois-search-card" style={{ flex: 1 }}>
+                <h3>WHOIS Lookup (Multi-Tier)</h3>
+                <br />
+                <div className="whois-search-wrap">
+                  <span className="whois-icon" aria-hidden="true">
+                    ⌕
+                  </span>
+                  <input
+                    id="whoisDomain"
+                    value={whoisInput}
+                    onChange={(e) => setWhoisInput(e.target.value)}
+                    onKeyDown={(e) => runOnEnter(e, handleWhoisLookup)}
+                    placeholder="Enter a hostname or IP"
+                  />
+                  <button className="whois-primary" onClick={handleWhoisLookup} disabled={whoisLoading}>
+                    {whoisLoading ? 'Running...' : 'WHOIS Lookup'}
                   </button>
                 </div>
-              </div>
-
-              <pre className="whois-terminal">
-                {whoisData ? (
-                  whoisPresentation.lines.map((line, index) => {
-                    if (line.type === 'blank') return <div key={`line-${index}`}>&nbsp;</div>;
-                    if (line.type === 'comment') {
-                      return (
-                        <div key={`line-${index}`} className="whois-comment">
-                          {line.value}
-                        </div>
-                      );
-                    }
-                    if (line.type === 'section') {
-                      return (
-                        <div key={`line-${index}`} className="whois-section">
-                          {line.value}
-                        </div>
-                      );
-                    }
-                    const isLink = /^https?:\/\//i.test(line.value);
-                    return (
-                      <div key={`line-${index}`}>
-                        <span className="whois-label">{line.label}:</span>{' '}
-                        <span className={isLink ? 'whois-link' : 'whois-value'}>{line.value}</span>
+                {whoisData && (
+                  <div className="whois-result-inline" style={{ marginTop: '16px', background: 'var(--surface-recessed)', padding: '12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                    <div className="whois-inline-actions" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Query: {whoisPresentation.queryDomain}</span>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className="copy-sm-btn" onClick={handleCopyWhois}>Copy</button>
+                        <button className="copy-sm-btn" onClick={handleExportWhoisTxt}>Export</button>
                       </div>
-                    );
-                  })
-                ) : (
-                  <div className="whois-comment"># Run a WHOIS lookup to display parsed results.</div>
+                    </div>
+                    <pre className="diag-log-pre" style={{ margin: 0, minHeight: 'auto', fontSize: '0.8rem' }}>
+                      {whoisPresentation.lines && whoisPresentation.lines.length > 0 ? (
+                        whoisPresentation.lines.map((line, index) => {
+                          if (line.type === 'blank') return <div key={`line-${index}`}>&nbsp;</div>;
+                          if (line.type === 'comment') return <div key={`line-${index}`} className="whois-comment">{line.value}</div>;
+                          if (line.type === 'section') return <div key={`line-${index}`} className="whois-section">{line.value}</div>;
+                          const isLink = /^https?:\/\//i.test(line.value);
+                          return (
+                            <div key={`line-${index}`}>
+                              <span className="whois-label">{line.label}:</span>{' '}
+                              <span className={isLink ? 'whois-link' : 'whois-value'}>{line.value}</span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="whois-raw-text">{whoisPresentation.text}</div>
+                      )}
+                    </pre>
+                  </div>
                 )}
-              </pre>
-            </section>
+              </section>
+
+              <section className="card whois-search-card" style={{ flex: 1 }}>
+                <h3>MAC Address OUI Matcher</h3>
+                <br />
+                <div className="whois-search-wrap">
+                  <span className="whois-icon" aria-hidden="true">
+                    ⌕
+                  </span>
+                  <input
+                    id="macTarget"
+                    value={macInput}
+                    onChange={(e) => setMacInput(e.target.value)}
+                    onKeyDown={(e) => runOnEnter(e, handleMacLookup)}
+                    placeholder="Enter MAC Address (00:1A:2B:...)"
+                  />
+                  <button className="whois-primary" onClick={handleMacLookup} disabled={macLoading}>
+                    {macLoading ? 'Looking up...' : 'Lookup Vendor'}
+                  </button>
+                </div>
+                {macResult && (
+                  <div className="mac-result" style={{ marginTop: '16px', background: 'var(--surface-recessed)', padding: '12px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)' }}>
+                    <pre className="diag-log-pre" style={{ margin: 0, minHeight: 'auto' }}>
+                      {macResult.rawOutput || JSON.stringify(macResult, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </section>
+            </div>
           </section>
         ) : null}
 
-        {activeTab === 'settings' ? (
-          <section className="card settings-panel">
-            <h2>Settings</h2>
-            <p className="empty">Store your Apilayer key locally for WHOIS requests.</p>
-            <label htmlFor="apiKey">Apilayer API Key</label>
-            <input
-              id="apiKey"
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Enter your WHOIS API key"
-            />
-            <button onClick={handleSaveApiKey}>Save API Key</button>
-          </section>
-        ) : null}
+
 
         <footer className="attribution-footer">
           NetPulse by Gabriel Chavez • Developed in Mexico with love
