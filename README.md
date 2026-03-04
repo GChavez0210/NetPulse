@@ -68,6 +68,12 @@ npm run build
 
 *Bundling notes:* The `oui-database.sqlite` relies on SQLite native bindings and is automatically parsed into `extraResources` alongside the ASAR archive for production deployment. Windows target architectures explicitly include `x64` and `arm64`.
 
+## Built with AI
+
+This application was built using an AI-assisted development workflow powered by Antigravity and Codex. AI accelerated the creation of the codebase, enabling faster iteration and a consistent architecture across the project.
+
+All system design, validation, and testing remain under developer control. The application runs locally and deterministically, with no external AI services involved during normal operation, ensuring reliability and data privacy.
+
 ## 📄 License
 MIT. See `LICENSE` for more information.
 
