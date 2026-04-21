@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node_modules/.bin/electron --version)",
+      "Bash(node -e \"const d=require\\(''''fs''''\\).readFileSync\\(''''/dev/stdin'''',''''utf8''''\\);const p=JSON.parse\\(d\\);console.log\\(''''version:'''',p.version\\)\")",
+      "Bash(node -e \"console.log\\(require\\(''/c/Users/gabox/DevProjects/NetPulse/node_modules/electron/package.json''\\).version\\)\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\\\Users\\\\gabox\\\\DevProjects\\\\NetPulse\\\\node_modules\\\\electron\\\\index.js''\")",
+      "Bash(powershell -Command \"& ''''.\\\\node_modules\\\\.bin\\\\electron.cmd'''' --eval \"\"const r = require\\(''''electron''''\\); console.log\\(JSON.stringify\\(Object.keys\\(r\\)\\)\\);\"\" 2>&1\")",
+      "Bash(npx electron:*)",
+      "Bash(powershell -Command \"& ''.\\\\node_modules\\\\electron\\\\dist\\\\electron.exe'' --version\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\\\Users\\\\gabox\\\\DevProjects\\\\NetPulse\\\\node_modules\\\\electron\\\\dist\\\\version''\")",
+      "Bash(powershell -Command \"Get-Content ''C:\\\\Users\\\\gabox\\\\DevProjects\\\\NetPulse\\\\node_modules\\\\electron\\\\path.txt''\")",
+      "Bash(powershell -Command \"Get-Item ''C:\\\\Users\\\\gabox\\\\DevProjects\\\\NetPulse\\\\node_modules\\\\electron\\\\dist\\\\electron.exe'' | Select-Object -Property Name, Length, LastWriteTime\")",
+      "Bash(npm install *)",
+      "Bash(npx tauri *)",
+      "Bash(cargo check *)",
+      "Bash(where cargo *)",
+      "Read(//c/Users/gabox/.cargo/**)",
+      "Bash(cmd.exe /c \"where cargo 2>nul && cargo --version 2>nul\")",
+      "Bash(cmd.exe /c \"where cargo\")",
+      "Bash(cmd.exe /c \"dir C:\\\\Users\\\\gabox\\\\.cargo\\\\bin\\\\cargo.exe 2>nul\")",
+      "Bash(cmd.exe /c \"dir /b C:\\\\Users\\\\gabox\\\\.cargo\\\\bin 2>nul & echo --- & rustup --version 2>nul & cargo --version 2>nul\")",
+      "Bash(cmd.exe /c \"dir C:\\\\Users\\\\gabox\\\\.cargo 2>nul\")"
+    ]
+  }
+}

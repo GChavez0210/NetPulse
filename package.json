@@ -1,74 +1,27 @@
 {
   "name": "netpulse",
   "version": "0.1.2",
-  "description": "NetPulse desktop app. Fast, focused network troubleshooting with Electron + React + Vite.",
-  "main": "electron/main.js",
-  "author": "",
-  "license": "MIT",
+  "description": "NetPulse — fast, focused network diagnostics. Built with Tauri + React + Vite.",
   "scripts": {
-    "clean:install": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"if (Test-Path node_modules) { Remove-Item -Recurse -Force node_modules }; if (Test-Path package-lock.json) { Remove-Item -Force package-lock.json }; npm install\"",
-    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
-    "dev:renderer": "vite",
-    "dev:electron": "wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
-    "build:web": "vite build",
-    "build": "npm run build:web && electron-builder",
-    "preview": "vite preview"
+    "dev": "tauri dev",
+    "dev:vite": "vite",
+    "build": "tauri build",
+    "build:vite": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
   },
   "dependencies": {
+    "@fontsource/jetbrains-mono": "^5.1.0",
+    "@tauri-apps/api": "^2",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.3"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@tailwindcss/vite": "^4.1.5",
     "@vitejs/plugin-react": "^4.4.1",
-    "concurrently": "^9.1.2",
-    "cross-env": "^7.0.3",
-    "electron": "^35.0.1",
-    "electron-builder": "^26.8.1",
-    "esbuild": "^0.27.3",
-    "vite": "^7.3.1",
-    "wait-on": "^8.0.2"
-  },
-  "build": {
-    "appId": "com.netpulse.app",
-    "productName": "NetPulse",
-    "directories": {
-      "output": "release"
-    },
-    "files": [
-      "dist/**/*",
-      "electron/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      "oui-database.sqlite"
-    ],
-    "win": {
-      "icon": "netpulse_icon.ico",
-      "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        }
-      ]
-    },
-    "nsis": {
-      "installerIcon": "netpulse_icon.ico",
-      "uninstallerIcon": "netpulse_icon.ico",
-      "installerHeaderIcon": "netpulse_icon.ico",
-      "deleteAppDataOnUninstall": true
-    },
-    "mac": {
-      "target": [
-        "dmg"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage"
-      ]
-    }
+    "tailwindcss": "^4.1.5",
+    "vite": "^7.3.1"
   }
 }
