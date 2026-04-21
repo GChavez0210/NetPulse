@@ -1,80 +1,105 @@
 # NetPulse v0.1.2
 
-<p align="center">
-  <img src="NetPulse-logo.png" alt="NetPulse Logo" width="250">
-</p>
+NetPulse is a fast, strictly local network diagnostics suite built with **Tauri 2**, **React**, and **Vite**. It interfaces directly with your operating system's native networking stack — ICMP binaries, raw TCP sockets, and DNS resolvers — to deliver precise, dependency-free telemetry in a modern dark glass desktop interface.
 
-NetPulse is a blazing-fast, strictly local network diagnostics suite built with Electron, React, and Vite. It directly interfaces with your operating system's native networking stack (raw sockets, ICMP binaries, and TCP wrappers) to deliver precise, dependency-free telemetry directly to a modern, dark-mode desktop interface.
-
-## 🚀 Features
+## Features
 
 ### Multi-Target Ping
-* **Live Dashboards:** Add and monitor multiple hosts simultaneously via ICMP using interactive sparkline charts.
-* **Granular Control:** Toggle packet sizes, DF (Don't Fragment) flags, and bulk-load IP lists.
-* **Latency Matrix:** High-level overview of global packet loss, p50/p95/p99 jitter percentiles, and current node health.
+- Monitor up to 8 hosts simultaneously via continuous ICMP sampling with live Recharts latency graphs.
+- Configurable packet size and DF (Don't Fragment) flag per session.
+- Single and bulk IP entry modes; CSV session export.
+- Global KPIs: active monitors, average RTT, average packet loss across all sessions.
+- Browser notifications on host up/down state transitions.
 
 ### Flood Test
-* **Stress Diagnostics:** Execute high-frequency ICMP pacing tests (100 to 1000 pings) to isolate unstable network links.
-* **Sequence Mapping:** Visual hit/miss/jitter sequence grid to quickly spot packet drop clusters.
-* **Deep Metrics:** Calculates maximum loss streaks, average RTT, and evaluates severity thresholds.
+- Execute high-frequency ICMP pacing tests (100 or 1000 packets) to isolate unstable links.
+- Real-time per-packet sequence grid (success / jitter / failed / pending cells).
+- Streaming diagnostic log and summary metrics: avg/min/max/p95 RTT, jitter, max consecutive loss streak.
 
-### Network Topology (Trace)
-* **Visual Traceroute:** Parses system traceroute data on the fly, rendering individual hops with their respective IPs and status bars.
-* **CSV Export:** Save topology reports to disk for external auditing.
+### Network Topology (Traceroute)
+- Visual hop-by-hop traceroute with latency status bars (good / warn / bad).
+- CSV export of full hop analysis.
 
-### Advanced Analytics
-* **TCP Ping (SYN Reachability):** Bypass ICMP blocks by probing specific TCP ports directly.
-* **MTR-Style Analysis:** Multi-round hop-by-hop latency and packet loss synthesis.
-* **Port Scanner Lite:** Quickly interrogate common ports (e.g., 22, 80, 443, 3389) across any edge node.
-* **DNS Toolkit:** 
-  * *DNS Validation:* Query specific types (A, AAAA, MX, NS, CNAME, PTR).
-  * *Split-Horizon Health:* Concurrently interrogate 1.1.1.1, 8.8.8.8, and local OS resolvers to detect DNS poisoning or caching mismatch.
-  * *DMARC Inspector:* Fetch and validate email security TXT records.
+### Advanced Analytics (7 tools)
+- **TCP Ping** — SYN reachability test with RTT on any port.
+- **MTR-style** — Multi-round traceroute aggregation; per-hop loss%, avg/best/worst RTT, worst-hop identification.
+- **DNS Toolkit** — Query A, AAAA, MX, NS, CNAME, PTR records against both system and Google (8.8.8.8) resolvers simultaneously.
+- **Port Scanner Lite** — Concurrent TCP connect scan across up to 32 ports.
+- **DNS Validation** — Checks A, AAAA, NS, SOA, CAA presence with a health score (0–100).
+- **Multi-Resolver Health** — Compares A/AAAA/NS records across System, Cloudflare (1.1.1.1), and Google (8.8.8.8) to detect split-horizon or poisoning.
+- **DMARC Inspector** — Fetches and parses `_dmarc.<domain>` TXT records, validates policy tags.
 
 ### Registry & Hardware Identity
-* **Multi-Tier WHOIS:** 100% API-free. Queries international registration databases using an internal RDAP HTTPS pipeline, automatically falling back to raw Port 43 TCP socket streams if RDAP fails.
-* **MAC OUI Matcher:** Millisecond-level hardware manufacturer lookups leveraging an embedded, highly optimized native SQLite (`vendordb`) table running directly on the filesystem.
+- **WHOIS / RDAP** — API-key-free. IPv4 addresses use the RDAP pipeline (`rdap.org`); domains follow the IANA referral chain via raw Port 43 TCP sockets to the authoritative registrar WHOIS server.
+- **MAC OUI Matcher** — Sub-millisecond hardware vendor lookups against a bundled SQLite database (`oui-database.sqlite`, `vendordb` table).
 
-## ⚙️ Architecture & Security
+## Architecture
 
-- `contextIsolation: true` & `nodeIntegration: false`: Strict boundary separation between the Node backend and React frontend via IPC Context Bridge.
-- **Dependency-Free Networking:** Uses Zero external API keys. All network operations (aside from WHOIS HTTPS RDAP) are executed locally via Node's `child_process`, `net`, `dgram`, and `dns` standard libraries.
+NetPulse is built on **Tauri 2** — a Rust + WebView desktop framework. The Rust backend handles all privileged operations; the React frontend communicates with it exclusively via Tauri's typed `invoke()` / `listen()` IPC.
 
-## 💻 Installation & Build Instructions
+### Backend (Rust — `src-tauri/`)
+
+| Module | Responsibility |
+|---|---|
+| `ping.rs` | Spawns `ping` binary; parses RTT from Windows and Unix output formats |
+| `flood.rs` | Async flood loop in a `tokio::spawn` task; emits per-packet events to the frontend |
+| `trace.rs` | Spawns `tracert` / `traceroute`; returns raw output for frontend parsing |
+| `tcp.rs` | `tokio::net::TcpStream` connect with timeout; concurrent port scanning via `futures::join_all` |
+| `dns.rs` | `hickory-resolver` with system, Cloudflare, and Google resolvers; DNS validation scoring; DMARC parsing; MTR aggregation |
+| `whois.rs` | `reqwest` RDAP for IPs; async TCP WHOIS with IANA referral chain for domains |
+| `oui.rs` | `rusqlite` query on bundled OUI database via `spawn_blocking` |
+| `settings.rs` | JSON settings file read/write in the Tauri app data directory |
+
+**Key crates:** `tauri 2`, `tokio` (full), `reqwest` (rustls-tls), `rusqlite` (bundled), `hickory-resolver`, `serde`, `futures`
+
+### Frontend (React — `src/renderer/`)
+
+- **Routing:** single `useState` tab switch in `App.jsx` — no router dependency.
+- **Charts:** Recharts `LineChart` for live latency, CSS conic-gradient donut for flood loss rate.
+- **Styling:** Tailwind CSS v4 (Vite plugin) + CSS custom properties design system. JetBrains Mono for all data readout, Inter for labels.
+- **IPC:** `@tauri-apps/api/core` `invoke()` for request/response commands; `@tauri-apps/api/event` `listen()` for flood test push events.
+
+## Installation & Development
 
 ### Prerequisites
-* Node.js 18+
-* npm or yarn
+
+- **Node.js** 18+
+- **Rust** (via [rustup](https://rustup.rs/))
+
+```bash
+# Install Rust on Windows
+winget install Rustlang.Rustup
+# Restart terminal, then:
+rustup default stable
+```
 
 ### Development
-1. Clone the repository and install dependencies:
-   ```bash
-   npm install
-   ```
-2. Spin up the Vite dev server and Electron shell:
-   ```bash
-   npm run dev
-   ```
+
+```bash
+npm install
+npm run dev
+```
+
+`npm run dev` runs `tauri dev`, which starts the Vite dev server and compiles the Rust backend concurrently. The first run takes a few minutes while Cargo fetches and compiles dependencies.
 
 ### Production Build
-Compile a standalone executable via `electron-builder` for your operating system:
+
 ```bash
 npm run build
 ```
 
-**Build Output:**
-* `/dist`: Frontend React bundle.
-* `/release`: Executable installer `.exe` / `.dmg` (depending on the build environment platform).
+**Output:** `src-tauri/target/release/bundle/` — platform-specific installer (NSIS `.exe` on Windows, `.dmg` on macOS, `AppImage` on Linux).
 
-*Bundling notes:* The `oui-database.sqlite` relies on SQLite native bindings and is automatically parsed into `extraResources` alongside the ASAR archive for production deployment. Windows target architectures explicitly include `x64` and `arm64`.
+*Bundling notes:* `oui-database.sqlite` is declared as a Tauri resource and resolved at runtime via `app_handle.path().resolve(...)`. No ASAR packing or `extraResources` config needed.
 
 ## Built with AI
 
-This application was built using an AI-assisted development workflow powered by **[Antigravity](https://antigravity.google/)** and **[Codex](https://chatgpt.com/codex)**. AI accelerated the creation of the codebase, enabling faster iteration cycles and a consistent architecture across the project.
+This application was built using an AI-assisted development workflow. AI accelerated the creation of the codebase, enabling faster iteration cycles and a consistent architecture across the project.
 
-All system design, validation, and testing remain under developer control. The application runs locally and deterministically, with no external AI services involved during normal operation, ensuring reliability and data privacy.
+All system design, validation, and testing remain under developer control. The application runs locally and deterministically with no external AI services involved during normal operation.
 
-## 📄 License
+## License
+
 MIT. See `LICENSE` for more information.
 
 ---
