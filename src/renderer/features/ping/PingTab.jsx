@@ -25,7 +25,7 @@ function healthPill(health) {
   return { label: 'STABLE', cls: 'pill-stable' };
 }
 
-export default function PingTab() {
+export default function PingTab({ addNotification }) {
   const [hostInput, setHostInput] = useState('');
   const [pingEntryMode, setPingEntryMode] = useState('single');
   const [bulkHostsInput, setBulkHostsInput] = useState('');
@@ -106,7 +106,10 @@ export default function PingTab() {
     );
     if (emitted) {
       const target = testsRef.current.find((t) => t.id === id);
-      if (target) pushNotification(target.host, emitted.type, emitted.text);
+      if (target) {
+        pushNotification(target.host, emitted.type, emitted.text);
+        addNotification?.(emitted.type, `${target.host}: ${emitted.text}`);
+      }
     }
   };
 

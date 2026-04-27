@@ -7,7 +7,7 @@ export const runOnEnter = (event, action) => {
   action();
 };
 
-export default function TraceTab() {
+export default function TraceTab({ addNotification }) {
   const [traceHost, setTraceHost] = useState('');
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceHops, setTraceHops] = useState([]);
@@ -101,6 +101,10 @@ export default function TraceTab() {
       setTraceHops(parsed.hops);
       setTraceSummary({ totalHops: parsed.totalHops, avgRtt: parsed.avgRtt });
       setStatus(`Traceroute complete to ${host}.`);
+      addNotification?.(
+        'trace_complete',
+        `Traceroute to ${host} complete — ${parsed.totalHops} hops, avg RTT ${parsed.avgRtt != null ? `${parsed.avgRtt.toFixed(1)} ms` : 'n/a'}`
+      );
       setTraceHost('');
     } catch (error) {
       setTraceOutput(String(error?.message || error));

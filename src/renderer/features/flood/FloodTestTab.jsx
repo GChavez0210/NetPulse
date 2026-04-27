@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { runOnEnter } from '../trace/TraceTab';
 import { getFloodPacketState } from '../../utils/networkUtils';
 
-export default function FloodTestTab() {
+export default function FloodTestTab({ addNotification }) {
   const [floodHostInput, setFloodHostInput] = useState('');
   const [rapidCount, setRapidCount] = useState(100);
+  const hostRef = useRef('');
   const [rapidRunning, setRapidRunning] = useState(false);
   const [status, setStatus] = useState('Ready.');
   const [rapidDetails, setRapidDetails] = useState({
@@ -91,6 +92,10 @@ export default function FloodTestTab() {
             }
           ].slice(-700)
         }));
+        addNotification?.(
+          'flood_complete',
+          `Flood test to ${hostRef.current} complete — sent=${summary.sent}, recv=${summary.received}, loss=${summary.loss_pct}%`
+        );
         setRapidRunning(false);
       });
 
@@ -133,6 +138,7 @@ export default function FloodTestTab() {
   const handleRapidPing = async () => {
     const host = floodHostInput.trim();
     if (!host) return;
+    hostRef.current = host;
     setRapidRunning(true);
     setRapidDetails({
       host,
