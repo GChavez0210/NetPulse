@@ -214,9 +214,6 @@ export default function FloodTestTab({ addNotification }) {
             FLOOD DIAGNOSTICS
           </span>
           <h1>Packet Loss Test</h1>
-          <p className="page-desc">
-            Rapid ICMP flood analysis with per-packet sequencing, jitter classification, and loss rate visualization.
-          </p>
         </div>
       </div>
 

@@ -161,9 +161,6 @@ export default function TraceTab({ addNotification }) {
             TOPOLOGY ANALYSIS
           </span>
           <h1>Traceroute</h1>
-          <p className="page-desc">
-            Visualize network path hops with per-hop latency and status classification.
-          </p>
         </div>
         <div className="page-header-actions" style={{ alignItems: 'center', gap: 8 }}>
           <span

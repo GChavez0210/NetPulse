@@ -97,9 +97,6 @@ export default function WhoisTab() {
             IDENTITY MODULE
           </span>
           <h1>Registry &amp; Hardware Identity</h1>
-          <p className="page-desc">
-            Multi-tier WHOIS lookups and OUI-based hardware vendor identification.
-          </p>
         </div>
       </div>
 

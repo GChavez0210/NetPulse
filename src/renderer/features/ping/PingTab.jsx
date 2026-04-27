@@ -279,15 +279,6 @@ export default function PingTab({ addNotification }) {
             MONITOR ACTIVE
           </span>
           <h1>Multi-Target Ping</h1>
-          <p className="page-desc">
-            High-precision diagnostic array for global infrastructure interrogation. Real-time latency tracking and resolver validation.
-          </p>
-        </div>
-        <div className="page-header-actions">
-          <button className="secondary" onClick={exportSession} disabled={tests.length === 0}>
-            Export Session
-          </button>
-          <button onClick={startAll}>Run Global Array</button>
         </div>
       </div>
 

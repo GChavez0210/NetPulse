@@ -201,9 +201,6 @@ export default function DiagnosticsTab() {
             ANALYTICS ENGINE
           </span>
           <h1>Network Analytics</h1>
-          <p className="page-desc">
-            Advanced diagnostic suite: TCP probing, MTR analysis, DNS toolkit, port scanning, and mail record inspection.
-          </p>
         </div>
       </div>
 

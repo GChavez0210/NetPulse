@@ -20,7 +20,11 @@
       "Bash(cmd.exe /c \"where cargo\")",
       "Bash(cmd.exe /c \"dir C:\\\\Users\\\\gabox\\\\.cargo\\\\bin\\\\cargo.exe 2>nul\")",
       "Bash(cmd.exe /c \"dir /b C:\\\\Users\\\\gabox\\\\.cargo\\\\bin 2>nul & echo --- & rustup --version 2>nul & cargo --version 2>nul\")",
-      "Bash(cmd.exe /c \"dir C:\\\\Users\\\\gabox\\\\.cargo 2>nul\")"
+      "Bash(cmd.exe /c \"dir C:\\\\Users\\\\gabox\\\\.cargo 2>nul\")",
+      "Bash(npm run *)",
+      "Bash(cmd.exe /c \"cargo --version && echo CARGO_PATH: && where cargo\")",
+      "Bash(cmd.exe /c \"dir C:\\\\Users\\\\gabox\\\\.cargo\\\\bin\\\\cargo.exe 2>nul & echo exit:%errorlevel%\")",
+      "Bash(export PATH=\"/c/Users/gabox/.cargo/bin:$PATH\")"
     ]
   }
 }
