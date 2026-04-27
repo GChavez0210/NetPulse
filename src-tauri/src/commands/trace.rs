@@ -1,6 +1,8 @@
 use serde::Serialize;
 use std::time::Duration;
 use tokio::process::Command;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Serialize)]
 pub struct TraceResult {
@@ -22,6 +24,8 @@ pub async fn trace_run(host: String) -> Result<TraceResult, String> {
     };
 
     cmd.kill_on_drop(true);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
 
     let result = tokio::time::timeout(Duration::from_secs(30), cmd.output()).await;
 

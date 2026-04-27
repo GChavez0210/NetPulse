@@ -1,5 +1,7 @@
 use serde::Serialize;
 use tokio::process::Command;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Serialize)]
 pub struct PingResult {
@@ -91,6 +93,8 @@ pub async fn ping_run(host: String) -> Result<PingResult, String> {
     };
 
     cmd.kill_on_drop(true);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
 
     let output = cmd
         .output()
@@ -144,6 +148,8 @@ pub async fn ping_sample(
     };
 
     cmd.kill_on_drop(true);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
 
     let output = cmd
         .output()

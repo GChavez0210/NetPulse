@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useReducer } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import LineChart from '../../components/LineChart';
 import { runOnEnter } from '../trace/TraceTab';
@@ -25,22 +25,89 @@ function healthPill(health) {
   return { label: 'STABLE', cls: 'pill-stable' };
 }
 
+// ---------------------------------------------------------------------------
+// Reducer — pure state transitions, no side effects
+// ---------------------------------------------------------------------------
+
+function pingReducer(tests, action) {
+  switch (action.type) {
+    case 'ADD':
+      return [action.test, ...tests];
+
+    case 'REMOVE':
+      return tests.filter((t) => t.id !== action.id);
+
+    case 'SET_PHASE':
+      return tests.map((t) => (t.id === action.id ? { ...t, phase: action.phase } : t));
+
+    case 'TOGGLE_VIEW':
+      return tests.map((t) =>
+        t.id === action.id
+          ? { ...t, viewMode: t.viewMode === 'graph' ? 'cli' : 'graph' }
+          : t
+      );
+
+    case 'APPLY_SAMPLE': {
+      const { id, result } = action;
+      return tests.map((test) => {
+        if (test.id !== id) return test;
+        const isSuccess = result.ok && result.latency_ms != null;
+        const failureStreak = isSuccess ? 0 : test.failureStreak + 1;
+        const becameDown =
+          !isSuccess && failureStreak >= DOWN_THRESHOLD && test.reachable !== false;
+        const becameUp = isSuccess && test.reachable !== true;
+        const reachable = isSuccess ? true : becameDown ? false : test.reachable;
+        const nextPoints = isSuccess
+          ? [...test.points, { ts: Date.now(), latency: result.latency_ms }].slice(-MAX_POINTS)
+          : test.points;
+        const nowTs = Date.now();
+        const nextEvents = [...test.events];
+        if (becameUp) nextEvents.push({ id: `${nowTs}-up`, ts: nowTs, kind: 'up' });
+        if (becameDown) nextEvents.push({ id: `${nowTs}-down`, ts: nowTs, kind: 'down' });
+        return {
+          ...test,
+          reachable,
+          failureStreak,
+          points: nextPoints,
+          events: nextEvents.slice(-20),
+          sent: test.sent + 1,
+          received: test.received + (isSuccess ? 1 : 0),
+          lastLatency: isSuccess ? result.latency_ms : null,
+          lastOutput: result.output || 'No output.',
+        };
+      });
+    }
+
+    default:
+      return tests;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function PingTab({ addNotification }) {
+  const [tests, dispatch] = useReducer(pingReducer, []);
   const [hostInput, setHostInput] = useState('');
   const [pingEntryMode, setPingEntryMode] = useState('single');
   const [bulkHostsInput, setBulkHostsInput] = useState('');
-  const [tests, setTests] = useState([]);
   const [packetSize, setPacketSize] = useState(56);
   const [dontFragment, setDontFragment] = useState(false);
   const [status, setStatus] = useState('Ready.');
 
+  // Refs that don't need to trigger re-renders
   const timersRef = useRef(new Map());
   const inFlightRef = useRef(new Set());
+  // Mirror of tests for reading current state in setInterval callbacks (avoids stale closures)
   const testsRef = useRef(tests);
+  // Mirror options for use inside async callbacks
+  const packetSizeRef = useRef(packetSize);
+  const dontFragmentRef = useRef(dontFragment);
 
-  useEffect(() => {
-    testsRef.current = tests;
-  }, [tests]);
+  useEffect(() => { testsRef.current = tests; }, [tests]);
+  useEffect(() => { packetSizeRef.current = packetSize; }, [packetSize]);
+  useEffect(() => { dontFragmentRef.current = dontFragment; }, [dontFragment]);
 
   useEffect(() => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -67,69 +134,47 @@ export default function PingTab({ addNotification }) {
     }
   };
 
-  const applyPingSample = (id, result) => {
-    let emitted = null;
-    setTests((prev) =>
-      prev.map((test) => {
-        if (test.id !== id) return test;
-        const isSuccess = result.ok && result.latency_ms != null;
-        const failureStreak = isSuccess ? 0 : test.failureStreak + 1;
-        let reachable = test.reachable;
-        if (isSuccess) {
-          if (test.reachable !== true) emitted = { type: 'up', text: 'Host recovered and is responding again.' };
-          reachable = true;
-        } else if (failureStreak >= DOWN_THRESHOLD && test.reachable !== false) {
-          emitted = { type: 'down', text: `Host is down after ${failureStreak} consecutive failed pings.` };
-          reachable = false;
-        }
-
-        const nextPoints = isSuccess
-          ? [...test.points, { ts: Date.now(), latency: result.latency_ms }].slice(-MAX_POINTS)
-          : test.points;
-        const nowTs = Date.now();
-        const nextEvents = [...test.events];
-        if (emitted?.type === 'up') nextEvents.push({ id: `${nowTs}-up`, ts: nowTs, kind: 'up' });
-        else if (emitted?.type === 'down') nextEvents.push({ id: `${nowTs}-down`, ts: nowTs, kind: 'down' });
-
-        return {
-          ...test,
-          reachable,
-          failureStreak,
-          points: nextPoints,
-          events: nextEvents.slice(-20),
-          sent: test.sent + 1,
-          received: test.received + (isSuccess ? 1 : 0),
-          lastLatency: isSuccess ? result.latency_ms : null,
-          lastOutput: result.output || 'No output.'
-        };
-      })
-    );
-    if (emitted) {
-      const target = testsRef.current.find((t) => t.id === id);
-      if (target) {
-        pushNotification(target.host, emitted.type, emitted.text);
-        addNotification?.(emitted.type, `${target.host}: ${emitted.text}`);
-      }
-    }
-  };
-
   const samplePing = async (id) => {
     if (inFlightRef.current.has(id)) return;
     const target = testsRef.current.find((t) => t.id === id);
     if (!target || target.phase !== 'running') return;
+
     inFlightRef.current.add(id);
     try {
       const result = await invoke('ping_sample', {
         host: target.host,
-        packetSize,
-        dontFragment
+        packetSize: packetSizeRef.current,
+        dontFragment: dontFragmentRef.current,
       });
-      applyPingSample(id, result);
+
+      // Compute notification need from current ref state before dispatching
+      const isSuccess = result.ok && result.latency_ms != null;
+      const newStreak = isSuccess ? 0 : target.failureStreak + 1;
+      let notification = null;
+      if (isSuccess && target.reachable !== true) {
+        notification = { type: 'up', text: 'Host recovered and is responding again.' };
+      } else if (!isSuccess && newStreak >= DOWN_THRESHOLD && target.reachable !== false) {
+        notification = {
+          type: 'down',
+          text: `Host is down after ${newStreak} consecutive failed pings.`,
+        };
+      }
+
+      dispatch({ type: 'APPLY_SAMPLE', id, result });
+
+      if (notification) {
+        pushNotification(target.host, notification.type, notification.text);
+        addNotification?.(notification.type, `${target.host}: ${notification.text}`);
+      }
     } catch (error) {
-      applyPingSample(id, {
-        ok: false,
-        latency_ms: null,
-        output: String(error?.message || error || 'Ping request failed')
+      dispatch({
+        type: 'APPLY_SAMPLE',
+        id,
+        result: {
+          ok: false,
+          latency_ms: null,
+          output: String(error?.message || error || 'Ping request failed'),
+        },
       });
     } finally {
       inFlightRef.current.delete(id);
@@ -144,7 +189,7 @@ export default function PingTab({ addNotification }) {
       return;
     }
     stopTimer(id);
-    setTests((prev) => prev.map((t) => (t.id === id ? { ...t, phase: 'running' } : t)));
+    dispatch({ type: 'SET_PHASE', id, phase: 'running' });
     samplePing(id);
     const timer = setInterval(() => samplePing(id), 1000);
     timersRef.current.set(id, timer);
@@ -152,28 +197,22 @@ export default function PingTab({ addNotification }) {
 
   const pauseTest = (id) => {
     stopTimer(id);
-    setTests((prev) => prev.map((t) => (t.id === id ? { ...t, phase: 'paused' } : t)));
+    dispatch({ type: 'SET_PHASE', id, phase: 'paused' });
   };
 
   const stopTest = (id) => {
     stopTimer(id);
-    setTests((prev) => prev.map((t) => (t.id === id ? { ...t, phase: 'stopped' } : t)));
+    dispatch({ type: 'SET_PHASE', id, phase: 'stopped' });
   };
 
   const removeTest = (id) => {
     stopTimer(id);
     inFlightRef.current.delete(id);
-    setTests((prev) => prev.filter((t) => t.id !== id));
+    dispatch({ type: 'REMOVE', id });
   };
 
   const toggleTestViewMode = (id) => {
-    setTests((prev) =>
-      prev.map((test) =>
-        test.id === id
-          ? { ...test, viewMode: test.viewMode === 'graph' ? 'cli' : 'graph' }
-          : test
-      )
-    );
+    dispatch({ type: 'TOGGLE_VIEW', id });
   };
 
   const addTest = () => {
@@ -188,7 +227,7 @@ export default function PingTab({ addNotification }) {
       return;
     }
     const test = createTest(host);
-    setTests((prev) => [test, ...prev]);
+    dispatch({ type: 'ADD', test });
     setStatus(`Created new ping test for ${host}.`);
     setHostInput('');
     setTimeout(() => startTest(test.id), 0);
@@ -205,15 +244,17 @@ export default function PingTab({ addNotification }) {
     );
     if (hosts.length === 0) { setStatus('Enter at least one valid host.'); return; }
     const existing = new Set(testsRef.current.map((t) => t.host.toLowerCase()));
-    const allowed = hosts
-      .filter((h) => !existing.has(h.toLowerCase()))
-      .slice(0, Math.max(MAX_ACTIVE_SESSIONS - testsRef.current.filter((t) => t.phase === 'running').length, 0));
+    const slots = Math.max(
+      MAX_ACTIVE_SESSIONS - testsRef.current.filter((t) => t.phase === 'running').length,
+      0
+    );
+    const allowed = hosts.filter((h) => !existing.has(h.toLowerCase())).slice(0, slots);
     if (allowed.length === 0) {
       setStatus('No bulk targets added (limit reached or duplicates).');
       return;
     }
     const newTests = allowed.map((host) => createTest(host));
-    setTests((prev) => [...newTests, ...prev]);
+    for (const test of newTests) dispatch({ type: 'ADD', test });
     setStatus(`Created ${newTests.length} sessions.`);
     setBulkHostsInput('');
     setTimeout(() => newTests.forEach((t) => startTest(t.id)), 0);
@@ -232,8 +273,14 @@ export default function PingTab({ addNotification }) {
     setStatus(started > 0 ? `Started ${started} sessions.` : 'No sessions started.');
   };
 
-  const pauseAll = () => { testsRef.current.forEach((t) => pauseTest(t.id)); setStatus('All tests paused.'); };
-  const stopAll = () => { testsRef.current.forEach((t) => stopTest(t.id)); setStatus('All tests stopped.'); };
+  const pauseAll = () => {
+    testsRef.current.forEach((t) => pauseTest(t.id));
+    setStatus('All tests paused.');
+  };
+  const stopAll = () => {
+    testsRef.current.forEach((t) => stopTest(t.id));
+    setStatus('All tests stopped.');
+  };
 
   const exportSession = () => {
     const rows = tests.map((t) => {
@@ -353,7 +400,7 @@ export default function PingTab({ addNotification }) {
               placeholder={'Enter a hostname\nexample.com\n192.168.1.1'}
             />
             <p className="empty" style={{ textAlign: 'left', padding: 0, marginBottom: 8 }}>
-              Bulk mode: paste targets here, then click Run Global Array or Start All.
+              Bulk mode: paste targets here, then click Start All.
             </p>
           </>
         ) : (
@@ -406,12 +453,23 @@ export default function PingTab({ addNotification }) {
           const { label: pillLabel, cls: pillCls } = healthPill(health);
 
           return (
-            <article key={test.id} className={`test-card ping-card`}>
+            <article key={test.id} className="test-card ping-card">
               <div className="test-head">
                 <div>
                   <div className="target-title">
                     <span className={`status-light ${health}`} />
-                    <h3 style={{ color: health === 'normal' ? 'var(--accent)' : health === 'degraded' ? 'var(--warn)' : health === 'down' ? 'var(--danger)' : 'var(--text)' }}>
+                    <h3
+                      style={{
+                        color:
+                          health === 'normal'
+                            ? 'var(--accent)'
+                            : health === 'degraded'
+                            ? 'var(--warn)'
+                            : health === 'down'
+                            ? 'var(--danger)'
+                            : 'var(--text)',
+                      }}
+                    >
                       {test.host}
                     </h3>
                   </div>
@@ -423,7 +481,12 @@ export default function PingTab({ addNotification }) {
               </div>
 
               {test.viewMode === 'graph' ? (
-                <LineChart points={test.points} health={health} liveLabel={pillLabel} events={test.events} />
+                <LineChart
+                  points={test.points}
+                  health={health}
+                  liveLabel={pillLabel}
+                  events={test.events}
+                />
               ) : (
                 <pre style={{ marginBottom: 8 }}>{test.lastOutput}</pre>
               )}
@@ -456,10 +519,18 @@ export default function PingTab({ addNotification }) {
                 <button onClick={() => startTest(test.id)} disabled={test.phase === 'running'}>
                   Resume
                 </button>
-                <button className="secondary" onClick={() => pauseTest(test.id)} disabled={test.phase !== 'running'}>
+                <button
+                  className="secondary"
+                  onClick={() => pauseTest(test.id)}
+                  disabled={test.phase !== 'running'}
+                >
                   Pause
                 </button>
-                <button className="danger" onClick={() => stopTest(test.id)} disabled={test.phase === 'stopped'}>
+                <button
+                  className="danger"
+                  onClick={() => stopTest(test.id)}
+                  disabled={test.phase === 'stopped'}
+                >
                   Stop
                 </button>
                 <button className="danger" onClick={() => removeTest(test.id)}>

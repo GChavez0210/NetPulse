@@ -1,5 +1,6 @@
 use serde::Serialize;
-use std::time::Duration;
+use std::sync::atomic::Ordering;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -262,10 +263,32 @@ async fn raw_whois_lookup(domain: &str) -> WhoisResult {
 }
 
 #[tauri::command]
-pub async fn whois_lookup(query: String) -> Result<WhoisResult, String> {
+pub async fn whois_lookup(
+    query: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<WhoisResult, String> {
     if query.is_empty() {
         return Err("Query must not be empty".to_string());
     }
+
+    // Enforce a 2-second minimum gap between WHOIS queries to avoid getting blocked.
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    let last_ms = state.last_whois_ms.load(Ordering::Relaxed);
+    let min_gap_ms = 2_000u64;
+    if now_ms.saturating_sub(last_ms) < min_gap_ms {
+        let wait = min_gap_ms - now_ms.saturating_sub(last_ms);
+        tokio::time::sleep(Duration::from_millis(wait)).await;
+    }
+    state.last_whois_ms.store(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64,
+        Ordering::Relaxed,
+    );
 
     if is_ipv4(&query) {
         Ok(rdap_lookup(&query).await)

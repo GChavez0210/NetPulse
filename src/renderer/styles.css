@@ -841,6 +841,13 @@ button:disabled:hover {
   margin-left: 6px;
 }
 
+.geo-tag {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  opacity: 0.8;
+  margin-left: 6px;
+}
+
 .trace-pill {
   display: inline-flex;
   align-items: center;

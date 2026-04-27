@@ -90,16 +90,19 @@ pub struct MtrHop {
 // Resolver helpers
 // ---------------------------------------------------------------------------
 
-fn make_custom_resolver(ip: &str) -> TokioAsyncResolver {
+fn make_custom_resolver(ip: &str) -> Result<TokioAsyncResolver, String> {
+    let socket_addr = format!("{ip}:53")
+        .parse()
+        .map_err(|_| format!("Invalid DNS server address: {ip}"))?;
     let mut config = ResolverConfig::new();
     config.add_name_server(NameServerConfig {
-        socket_addr: format!("{ip}:53").parse().unwrap(),
+        socket_addr,
         protocol: Protocol::Udp,
         tls_dns_name: None,
         trust_negative_responses: false,
         bind_addr: None,
     });
-    TokioAsyncResolver::tokio(config, ResolverOpts::default())
+    Ok(TokioAsyncResolver::tokio(config, ResolverOpts::default()))
 }
 
 fn make_system_resolver() -> Result<TokioAsyncResolver, String> {
@@ -148,11 +151,14 @@ async fn resolve_record(
             .await
             .map(|r| r.iter().map(|rdata| rdata.to_string()).collect())
             .unwrap_or_default(),
-        "PTR" => resolver
-            .reverse_lookup(domain.parse().unwrap_or([0, 0, 0, 0].into()))
-            .await
-            .map(|r| r.iter().map(|ptr| ptr.to_string()).collect())
-            .unwrap_or_default(),
+        "PTR" => match domain.parse() {
+            Ok(ip) => resolver
+                .reverse_lookup(ip)
+                .await
+                .map(|r| r.iter().map(|ptr| ptr.to_string()).collect())
+                .unwrap_or_default(),
+            Err(_) => vec![format!("Invalid IP address for PTR lookup: {domain}")],
+        },
         "SOA" => resolver
             .lookup(domain, hickory_resolver::proto::rr::RecordType::SOA)
             .await
@@ -188,7 +194,7 @@ async fn resolve_record(
 #[tauri::command]
 pub async fn dns_query(domain: String, record_type: String) -> Result<DnsResult, String> {
     let system_resolver = make_system_resolver().map_err(|e| e.to_string())?;
-    let google_resolver = make_custom_resolver("8.8.8.8");
+    let google_resolver = make_custom_resolver("8.8.8.8")?;
 
     let (local, google) = tokio::join!(
         resolve_record(&system_resolver, &domain, &record_type),
@@ -320,8 +326,8 @@ pub async fn dns_validate(domain: String) -> Result<DnsValidateResult, String> {
 #[tauri::command]
 pub async fn dns_health(domain: String) -> Result<DnsHealthResult, String> {
     let system_resolver = make_system_resolver().map_err(|e| e.to_string())?;
-    let cloudflare_resolver = make_custom_resolver("1.1.1.1");
-    let google_resolver = make_custom_resolver("8.8.8.8");
+    let cloudflare_resolver = make_custom_resolver("1.1.1.1")?;
+    let google_resolver = make_custom_resolver("8.8.8.8")?;
 
     let (sys_a, sys_aaaa, sys_ns) = tokio::join!(
         resolve_record(&system_resolver, &domain, "A"),
@@ -470,18 +476,27 @@ pub async fn dns_dmarc(domain: String) -> Result<DmarcResult, String> {
 
 #[tauri::command]
 pub async fn mtr_run(host: String, rounds: u32) -> Result<MtrResult, String> {
+    use futures::StreamExt;
+    use std::collections::HashMap;
+
     let rounds = rounds.clamp(2, 30);
 
-    use std::collections::HashMap;
+    // Run up to 5 traceroute rounds concurrently instead of sequentially.
+    let trace_results = futures::stream::iter(
+        (0..rounds).map(|_| super::trace::trace_run(host.clone())),
+    )
+    .buffer_unordered(5)
+    .collect::<Vec<_>>()
+    .await;
 
     // hop_number → list of (ip, rtt_ms) per round
     let mut hop_data: HashMap<u32, Vec<(String, Option<f64>)>> = HashMap::new();
 
-    for _ in 0..rounds {
-        let trace = super::trace::trace_run(host.clone()).await?;
-        if !trace.ok {
-            continue;
-        }
+    for trace_result in trace_results {
+        let trace = match trace_result {
+            Ok(t) if t.ok => t,
+            _ => continue,
+        };
 
         for line in trace.output.lines() {
             // Match lines like "  1   192.168.1.1  1.234 ms" or Windows "  1    192.168.1.1   1ms"

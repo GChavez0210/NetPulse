@@ -1,5 +1,4 @@
 use serde::Serialize;
-use tauri::Manager;
 
 #[derive(Serialize)]
 pub struct MacResult {
@@ -12,8 +11,10 @@ pub struct MacResult {
 }
 
 #[tauri::command]
-pub async fn mac_lookup(mac: String, app_handle: tauri::AppHandle) -> Result<MacResult, String> {
-    // Strip non-hex characters
+pub async fn mac_lookup(
+    mac: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<MacResult, String> {
     let hex_only: String = mac
         .chars()
         .filter(|c| c.is_ascii_hexdigit())
@@ -32,8 +33,6 @@ pub async fn mac_lookup(mac: String, app_handle: tauri::AppHandle) -> Result<Mac
     }
 
     let oui_hex = hex_only[..6].to_string();
-
-    // Parse OUI hex string to u64
     let oui_int = match u64::from_str_radix(&oui_hex, 16) {
         Ok(v) => v,
         Err(e) => {
@@ -48,12 +47,6 @@ pub async fn mac_lookup(mac: String, app_handle: tauri::AppHandle) -> Result<Mac
         }
     };
 
-    // Resolve database path from app resources
-    let db_path = app_handle
-        .path()
-        .resolve("oui-database.sqlite", tauri::path::BaseDirectory::Resource)
-        .map_err(|e| format!("Failed to resolve resource path: {e}"))?;
-
     let oui_display = format!(
         "{:02X}:{:02X}:{:02X}",
         (oui_int >> 16) & 0xFF,
@@ -61,9 +54,14 @@ pub async fn mac_lookup(mac: String, app_handle: tauri::AppHandle) -> Result<Mac
         oui_int & 0xFF
     );
 
+    let conn_arc = state.oui_conn.clone();
     let result = tokio::task::spawn_blocking(move || {
-        let conn = rusqlite::Connection::open(&db_path)
-            .map_err(|e| format!("Failed to open database: {e}"))?;
+        let guard = conn_arc
+            .lock()
+            .map_err(|_| "OUI database lock is poisoned".to_string())?;
+        let conn = guard
+            .as_ref()
+            .ok_or("OUI database is not available (startup initialization failed)".to_string())?;
 
         let mut stmt = conn
             .prepare("SELECT vendor FROM vendordb WHERE mac = ?1")

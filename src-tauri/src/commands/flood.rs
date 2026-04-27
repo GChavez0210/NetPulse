@@ -3,6 +3,8 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::Emitter;
 use tokio::process::Command;
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Serialize, Clone)]
 pub struct FloodSample {
@@ -77,6 +79,8 @@ async fn do_single_icmp_ping(host: &str) -> Option<f64> {
         c
     };
     cmd.kill_on_drop(true);
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
 
     let output = match cmd.output().await {
         Ok(o) => o,
@@ -173,11 +177,13 @@ pub async fn flood_start(
     let cancel_flag = state.flood_cancel.clone();
 
     tokio::spawn(async move {
-        // Emit starting status
-        let _ = app_handle.emit(
-            "ping:flood-status",
-            serde_json::json!({ "status": "running", "message": "Starting flood test..." }),
-        );
+        let emit = |event: &str, payload: serde_json::Value| {
+            if let Err(e) = app_handle.emit(event, payload) {
+                eprintln!("[flood] emit '{event}' failed: {e}");
+            }
+        };
+
+        emit("ping:flood-status", serde_json::json!({ "status": "running", "message": "Starting flood test..." }));
 
         let mut rtts: Vec<f64> = Vec::new();
         let mut received: u32 = 0;
@@ -186,10 +192,7 @@ pub async fn flood_start(
 
         for seq in 1..=count {
             if cancel_flag.load(Ordering::SeqCst) {
-                let _ = app_handle.emit(
-                    "ping:flood-status",
-                    serde_json::json!({ "status": "cancelled" }),
-                );
+                emit("ping:flood-status", serde_json::json!({ "status": "cancelled" }));
                 break;
             }
 
@@ -214,7 +217,9 @@ pub async fn flood_start(
                 timestamp: format_time(),
             };
 
-            let _ = app_handle.emit("ping:flood-sample", &sample);
+            if let Err(e) = app_handle.emit("ping:flood-sample", &sample) {
+                eprintln!("[flood] emit 'ping:flood-sample' seq={seq} failed: {e}");
+            }
 
             // Adaptive sleep
             let delay_ms = match rtt {
@@ -226,11 +231,8 @@ pub async fn flood_start(
         }
 
         let summary = build_flood_summary(&rtts, count, received, max_streak, "done");
-        let _ = app_handle.emit("ping:flood-done", serde_json::json!({ "summary": summary }));
-        let _ = app_handle.emit(
-            "ping:flood-status",
-            serde_json::json!({ "status": "done" }),
-        );
+        emit("ping:flood-done", serde_json::json!({ "summary": summary }));
+        emit("ping:flood-status", serde_json::json!({ "status": "done" }));
     });
 
     Ok(FloodStartResult {
