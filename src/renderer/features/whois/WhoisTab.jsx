@@ -80,8 +80,9 @@ export default function WhoisTab() {
       setStatus(res.ok ? 'MAC lookup complete.' : 'MAC lookup failed.');
       if (res.ok) setMacInput('');
     } catch (e) {
-      setMacResult({ ok: false, error: e.message });
-      setStatus('MAC lookup runtime error.');
+      const msg = String(e?.message || e);
+      setMacResult({ ok: false, error: msg });
+      setStatus(`MAC lookup error: ${msg}`);
     } finally {
       setMacLoading(false);
     }
@@ -188,7 +189,9 @@ export default function WhoisTab() {
               }}
             >
               <pre className="diag-log-pre" style={{ margin: 0, minHeight: 'auto' }}>
-                {macResult.rawOutput || JSON.stringify(macResult, null, 2)}
+                {macResult.ok
+                  ? (macResult.raw_output || macResult.rawOutput)
+                  : `Error: ${macResult.error || 'Unknown error'}`}
               </pre>
             </div>
           )}

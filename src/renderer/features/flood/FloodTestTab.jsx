@@ -30,12 +30,12 @@ export default function FloodTestTab({ addNotification }) {
   });
 
   useEffect(() => {
-    let unlistenSample;
-    let unlistenDone;
-    let unlistenStatus;
+    let cancelled = false;
+    const unlisteners = [];
 
     const setup = async () => {
-      unlistenSample = await listen('ping:flood-sample', (e) => {
+      const unlistenSample = await listen('ping:flood-sample', (e) => {
+        if (cancelled) return;
         const sample = e.payload;
         if (!sample || typeof sample.seq !== 'number') return;
         setRapidDetails((prev) => {
@@ -66,8 +66,11 @@ export default function FloodTestTab({ addNotification }) {
           };
         });
       });
+      if (cancelled) { unlistenSample(); return; }
+      unlisteners.push(unlistenSample);
 
-      unlistenDone = await listen('ping:flood-done', (e) => {
+      const unlistenDone = await listen('ping:flood-done', (e) => {
+        if (cancelled) return;
         const payload = e.payload;
         const summary = payload?.summary;
         if (!summary) return;
@@ -98,8 +101,11 @@ export default function FloodTestTab({ addNotification }) {
         );
         setRapidRunning(false);
       });
+      if (cancelled) { unlistenDone(); return; }
+      unlisteners.push(unlistenDone);
 
-      unlistenStatus = await listen('ping:flood-status', (e) => {
+      const unlistenStatus = await listen('ping:flood-status', (e) => {
+        if (cancelled) return;
         const payload = e.payload;
         if (!payload) return;
         if (
@@ -123,14 +129,15 @@ export default function FloodTestTab({ addNotification }) {
             : prev.logLines
         }));
       });
+      if (cancelled) { unlistenStatus(); return; }
+      unlisteners.push(unlistenStatus);
     };
 
     setup();
 
     return () => {
-      unlistenSample?.();
-      unlistenDone?.();
-      unlistenStatus?.();
+      cancelled = true;
+      unlisteners.forEach((u) => u());
       invoke('flood_cancel').catch(() => {});
     };
   }, []);

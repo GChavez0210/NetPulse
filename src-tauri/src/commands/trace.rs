@@ -14,8 +14,10 @@ pub struct TraceResult {
 #[tauri::command]
 pub async fn trace_run(host: String) -> Result<TraceResult, String> {
     let mut cmd = if cfg!(target_os = "windows") {
-        let mut c = Command::new("tracert");
-        c.args(["-h", "20", &host]);
+        // cmd /c gives tracert a proper console context from a GUI (windowless) process.
+        // -w 2000 caps per-hop wait to 2 s → 20 hops × 2 s = 40 s max, under the 60 s limit.
+        let mut c = Command::new("cmd");
+        c.args(["/c", "tracert", "-d", "-h", "20", "-w", "1000", &host]);
         c
     } else {
         let mut c = Command::new("traceroute");
@@ -27,28 +29,35 @@ pub async fn trace_run(host: String) -> Result<TraceResult, String> {
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    let result = tokio::time::timeout(Duration::from_secs(30), cmd.output()).await;
+    let result = tokio::time::timeout(Duration::from_secs(90), cmd.output()).await;
 
     match result {
         Ok(Ok(output)) => {
             let stdout = String::from_utf8_lossy(&output.stdout).to_string();
             let stderr = String::from_utf8_lossy(&output.stderr).to_string();
             let combined = format!("{stdout}{stderr}");
+            eprintln!("[trace] exit={} stdout={}b stderr={}b", output.status, stdout.len(), stderr.len());
             Ok(TraceResult {
                 ok: true,
                 output: combined,
                 error: None,
             })
         }
-        Ok(Err(e)) => Ok(TraceResult {
-            ok: false,
-            output: String::new(),
-            error: Some(format!("Failed to spawn traceroute: {e}")),
-        }),
-        Err(_) => Ok(TraceResult {
-            ok: false,
-            output: String::new(),
-            error: Some("Traceroute timed out after 30 seconds".to_string()),
-        }),
+        Ok(Err(e)) => {
+            eprintln!("[trace] spawn error: {e}");
+            Ok(TraceResult {
+                ok: false,
+                output: String::new(),
+                error: Some(format!("Failed to spawn: {e}")),
+            })
+        }
+        Err(_) => {
+            eprintln!("[trace] timed out after 60 s");
+            Ok(TraceResult {
+                ok: false,
+                output: String::new(),
+                error: Some("Traceroute timed out after 90 seconds".to_string()),
+            })
+        }
     }
 }

@@ -55,17 +55,17 @@ pub async fn mac_lookup(
     );
 
     let conn_arc = state.oui_conn.clone();
-    let result = tokio::task::spawn_blocking(move || {
+    let db_result = tokio::task::spawn_blocking(move || {
         let guard = conn_arc
             .lock()
             .map_err(|_| "OUI database lock is poisoned".to_string())?;
         let conn = guard
             .as_ref()
-            .ok_or("OUI database is not available (startup initialization failed)".to_string())?;
+            .ok_or_else(|| "OUI database not loaded — check startup logs".to_string())?;
 
         let mut stmt = conn
             .prepare("SELECT vendor FROM vendordb WHERE mac = ?1")
-            .map_err(|e| format!("Failed to prepare query: {e}"))?;
+            .map_err(|e| format!("DB query error: {e}"))?;
 
         let vendor: Option<String> = stmt
             .query_row(rusqlite::params![oui_int], |row| row.get(0))
@@ -74,7 +74,21 @@ pub async fn mac_lookup(
         Ok::<Option<String>, String>(vendor)
     })
     .await
-    .map_err(|e| format!("Database task failed: {e}"))??;
+    .map_err(|e| format!("Database task panicked: {e}"));
+
+    let result = match db_result {
+        Ok(Ok(v)) => v,
+        Ok(Err(e)) | Err(e) => {
+            return Ok(MacResult {
+                ok: false,
+                mac,
+                oui: oui_display,
+                vendor: None,
+                raw_output: String::new(),
+                error: Some(e),
+            });
+        }
+    };
 
     let raw_output = match &result {
         Some(v) => format!("OUI: {oui_display}\nVendor: {v}"),

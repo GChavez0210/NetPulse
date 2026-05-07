@@ -172,8 +172,9 @@ export default function TraceTab({ addNotification }) {
       // Fetch GeoIP in background after results are shown
       fetchGeoData(parsed.hops);
     } catch (error) {
-      setTraceOutput(String(error?.message || error));
-      setStatus(`Traceroute failed to ${host}.`);
+      const msg = String(error?.message || error);
+      setTraceOutput(msg);
+      setStatus(`Traceroute failed: ${msg}`);
     } finally {
       setTraceLoading(false);
     }

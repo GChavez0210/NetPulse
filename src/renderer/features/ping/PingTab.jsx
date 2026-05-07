@@ -55,7 +55,7 @@ function pingReducer(tests, action) {
         const failureStreak = isSuccess ? 0 : test.failureStreak + 1;
         const becameDown =
           !isSuccess && failureStreak >= DOWN_THRESHOLD && test.reachable !== false;
-        const becameUp = isSuccess && test.reachable !== true;
+        const becameUp = isSuccess && test.reachable === false;
         const reachable = isSuccess ? true : becameDown ? false : test.reachable;
         const nextPoints = isSuccess
           ? [...test.points, { ts: Date.now(), latency: result.latency_ms }].slice(-MAX_POINTS)
@@ -147,13 +147,14 @@ export default function PingTab({ addNotification }) {
         dontFragment: dontFragmentRef.current,
       });
 
-      // Compute notification need from current ref state before dispatching
+      // Re-read target after the await so reachable/failureStreak reflect the latest state.
+      const freshTarget = testsRef.current.find((t) => t.id === id) ?? target;
       const isSuccess = result.ok && result.latency_ms != null;
-      const newStreak = isSuccess ? 0 : target.failureStreak + 1;
+      const newStreak = isSuccess ? 0 : freshTarget.failureStreak + 1;
       let notification = null;
-      if (isSuccess && target.reachable !== true) {
+      if (isSuccess && freshTarget.reachable === false) {
         notification = { type: 'up', text: 'Host recovered and is responding again.' };
-      } else if (!isSuccess && newStreak >= DOWN_THRESHOLD && target.reachable !== false) {
+      } else if (!isSuccess && newStreak >= DOWN_THRESHOLD && freshTarget.reachable !== false) {
         notification = {
           type: 'down',
           text: `Host is down after ${newStreak} consecutive failed pings.`,
@@ -163,8 +164,8 @@ export default function PingTab({ addNotification }) {
       dispatch({ type: 'APPLY_SAMPLE', id, result });
 
       if (notification) {
-        pushNotification(target.host, notification.type, notification.text);
-        addNotification?.(notification.type, `${target.host}: ${notification.text}`);
+        pushNotification(freshTarget.host, notification.type, notification.text);
+        addNotification?.(notification.type, `${freshTarget.host}: ${notification.text}`);
       }
     } catch (error) {
       dispatch({

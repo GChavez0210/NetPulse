@@ -28,14 +28,25 @@ pub fn run() {
                 .path()
                 .resolve("oui-database.sqlite", tauri::path::BaseDirectory::Resource)
             {
-                Ok(db_path) => match rusqlite::Connection::open(&db_path) {
-                    Ok(conn) => {
-                        if let Ok(mut guard) = oui_conn.lock() {
-                            *guard = Some(conn);
+                Ok(db_path) => {
+                    eprintln!("[setup] OUI database path: {}", db_path.display());
+                    if !db_path.exists() {
+                        eprintln!("[setup] OUI database file not found at that path");
+                    } else {
+                        match rusqlite::Connection::open_with_flags(
+                            &db_path,
+                            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+                        ) {
+                            Ok(conn) => {
+                                eprintln!("[setup] OUI database opened successfully");
+                                if let Ok(mut guard) = oui_conn.lock() {
+                                    *guard = Some(conn);
+                                }
+                            }
+                            Err(e) => eprintln!("[setup] Failed to open OUI database: {e}"),
                         }
                     }
-                    Err(e) => eprintln!("[setup] Failed to open OUI database: {e}"),
-                },
+                }
                 Err(e) => eprintln!("[setup] Could not resolve OUI database path: {e}"),
             }
             Ok(())
