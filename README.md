@@ -9,16 +9,19 @@ NetPulse is a fast, strictly local network diagnostics suite built with **Tauri 
 - Configurable packet size and DF (Don't Fragment) flag per session.
 - Single and bulk IP entry modes; CSV session export.
 - Global KPIs: active monitors, average RTT, average packet loss across all sessions.
-- Browser notifications on host up/down state transitions.
+- Per-session health pills (Stable / Jitter / Timeout) with automatic state tracking.
+- In-app notifications on host up/down state transitions.
 
 ### Flood Test
 - Execute high-frequency ICMP pacing tests (100 or 1000 packets) to isolate unstable links.
 - Real-time per-packet sequence grid (success / jitter / failed / pending cells).
 - Streaming diagnostic log and summary metrics: avg/min/max/p95 RTT, jitter, max consecutive loss streak.
+- In-app notification on test completion with full summary.
 
 ### Network Topology (Traceroute)
 - Visual hop-by-hop traceroute with latency status bars (good / warn / bad).
-- CSV export of full hop analysis.
+- Automatic GeoIP enrichment per hop — country, city, org, and ASN fetched in the background after the trace completes.
+- CSV export of full hop analysis including geographic and ASN data.
 
 ### Advanced Analytics (7 tools)
 - **TCP Ping** — SYN reachability test with RTT on any port.
@@ -31,7 +34,16 @@ NetPulse is a fast, strictly local network diagnostics suite built with **Tauri 
 
 ### Registry & Hardware Identity
 - **WHOIS / RDAP** — API-key-free. IPv4 addresses use the RDAP pipeline (`rdap.org`); domains follow the IANA referral chain via raw Port 43 TCP sockets to the authoritative registrar WHOIS server.
-- **MAC OUI Matcher** — Sub-millisecond hardware vendor lookups against a bundled SQLite database (`oui-database.sqlite`, `vendordb` table).
+- **MAC OUI Matcher** — Sub-millisecond hardware vendor lookups against a bundled SQLite database (5.8 MB, opened read-only at startup).
+
+### In-App Notifications
+- Persistent notification panel accessible from the top nav.
+- Captures ping up/down transitions, flood test completions, and traceroute completions.
+- Up to 100 entries retained per session; one-click clear all.
+
+### Settings
+- Persistent JSON settings file stored in the Tauri app data directory.
+- Read and written via typed `invoke()` calls; survives app restarts.
 
 ## Architecture
 
@@ -43,21 +55,23 @@ NetPulse is built on **Tauri 2** — a Rust + WebView desktop framework. The Rus
 |---|---|
 | `ping.rs` | Spawns `ping` binary; parses RTT from Windows and Unix output formats |
 | `flood.rs` | Async flood loop in a `tokio::spawn` task; emits per-packet events to the frontend |
-| `trace.rs` | Spawns `tracert` / `traceroute`; returns raw output for frontend parsing |
+| `trace.rs` | Spawns `tracert` (via `cmd /c`) / `traceroute`; returns raw output for frontend parsing |
 | `tcp.rs` | `tokio::net::TcpStream` connect with timeout; concurrent port scanning via `futures::join_all` |
 | `dns.rs` | `hickory-resolver` with system, Cloudflare, and Google resolvers; DNS validation scoring; DMARC parsing; MTR aggregation |
 | `whois.rs` | `reqwest` RDAP for IPs; async TCP WHOIS with IANA referral chain for domains |
-| `oui.rs` | `rusqlite` query on bundled OUI database via `spawn_blocking` |
+| `oui.rs` | `rusqlite` read-only query on bundled OUI database via `spawn_blocking` |
+| `geoip.rs` | `reqwest` lookup via `ip-api.com`; skips private/loopback addresses |
 | `settings.rs` | JSON settings file read/write in the Tauri app data directory |
 
 **Key crates:** `tauri 2`, `tokio` (full), `reqwest` (rustls-tls), `rusqlite` (bundled), `hickory-resolver`, `serde`, `futures`
 
 ### Frontend (React — `src/renderer/`)
 
-- **Routing:** single `useState` tab switch in `App.jsx` — no router dependency.
+- **Routing:** single `useState` tab switch in `App.jsx` — no router dependency. All tabs stay mounted to preserve state; inactive tabs are hidden via CSS.
 - **Charts:** Recharts `LineChart` for live latency, CSS conic-gradient donut for flood loss rate.
 - **Styling:** Tailwind CSS v4 (Vite plugin) + CSS custom properties design system. JetBrains Mono for all data readout, Inter for labels.
 - **IPC:** `@tauri-apps/api/core` `invoke()` for request/response commands; `@tauri-apps/api/event` `listen()` for flood test push events.
+- **Notifications:** in-app panel component in `App.jsx`; `addNotification` callback passed down to feature tabs.
 
 ## Installation & Development
 
@@ -90,7 +104,7 @@ npm run build
 
 **Output:** `src-tauri/target/release/bundle/` — platform-specific installer (NSIS `.exe` on Windows, `.dmg` on macOS, `AppImage` on Linux).
 
-*Bundling notes:* `oui-database.sqlite` is declared as a Tauri resource and resolved at runtime via `app_handle.path().resolve(...)`. No ASAR packing or `extraResources` config needed.
+*Bundling notes:* `oui-database.sqlite` is declared as a Tauri resource and opened read-only at startup via `app_handle.path().resolve(...)`. No ASAR packing or `extraResources` config needed.
 
 ## Built with AI
 
