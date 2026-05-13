@@ -2,28 +2,6 @@
 
 NetPulse is a fast, strictly local network diagnostics suite built with **Tauri 2**, **React**, and **Vite**. It interfaces directly with your operating system's native networking stack — ICMP binaries, raw TCP sockets, and DNS resolvers — to deliver precise, dependency-free telemetry in a modern dark glass desktop interface.
 
-## Getting NetPulse (End Users)
-
-If you just want to run NetPulse without building it yourself, download the pre-built installer from the [GitHub Releases page](../../releases).
-
-### Windows
-1. Download `NetPulse_x.x.x_x64-setup.exe` from the latest release.
-2. Double-click the installer and follow the wizard (Next → Install → Finish).
-3. Launch **NetPulse** from the Start menu or desktop shortcut.
-4. No additional software required — everything is bundled.
-
-> **Note:** Windows may show a SmartScreen warning because the installer is not code-signed. Click **More info → Run anyway** to proceed.
-
-### macOS
-1. Download `NetPulse_x.x.x_x64.dmg` (Intel) or `NetPulse_x.x.x_aarch64.dmg` (Apple Silicon).
-2. Open the `.dmg`, drag **NetPulse** into your Applications folder.
-3. On first launch, macOS may block it. Go to **System Settings → Privacy & Security → Open Anyway**.
-
-### Linux
-1. Download `netpulse_x.x.x_amd64.AppImage`.
-2. Make it executable: `chmod +x netpulse_*.AppImage`
-3. Run it: `./netpulse_*.AppImage`
-
 ---
 
 ## Features
