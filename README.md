@@ -1,13 +1,42 @@
-# NetPulse v0.1.2
+# NetPulse v0.5.0
 
 NetPulse is a fast, strictly local network diagnostics suite built with **Tauri 2**, **React**, and **Vite**. It interfaces directly with your operating system's native networking stack — ICMP binaries, raw TCP sockets, and DNS resolvers — to deliver precise, dependency-free telemetry in a modern dark glass desktop interface.
+
+## Getting NetPulse (End Users)
+
+If you just want to run NetPulse without building it yourself, download the pre-built installer from the [GitHub Releases page](../../releases).
+
+### Windows
+1. Download `NetPulse_x.x.x_x64-setup.exe` from the latest release.
+2. Double-click the installer and follow the wizard (Next → Install → Finish).
+3. Launch **NetPulse** from the Start menu or desktop shortcut.
+4. No additional software required — everything is bundled.
+
+> **Note:** Windows may show a SmartScreen warning because the installer is not code-signed. Click **More info → Run anyway** to proceed.
+
+### macOS
+1. Download `NetPulse_x.x.x_x64.dmg` (Intel) or `NetPulse_x.x.x_aarch64.dmg` (Apple Silicon).
+2. Open the `.dmg`, drag **NetPulse** into your Applications folder.
+3. On first launch, macOS may block it. Go to **System Settings → Privacy & Security → Open Anyway**.
+
+### Linux
+1. Download `netpulse_x.x.x_amd64.AppImage`.
+2. Make it executable: `chmod +x netpulse_*.AppImage`
+3. Run it: `./netpulse_*.AppImage`
+
+---
 
 ## Features
 
 ### Multi-Target Ping
-- Monitor up to 8 hosts simultaneously via continuous ICMP sampling with live Recharts latency graphs.
+- Monitor up to 16 hosts simultaneously via continuous ICMP sampling with live Recharts latency graphs.
 - Configurable packet size and DF (Don't Fragment) flag per session.
-- Single and bulk IP entry modes; CSV session export.
+- Per-session custom ping interval (0.5s, 1s, 2s, 5s, 10s).
+- Host aliases — set a friendly display name per monitor (double-click or pencil icon).
+- Drag-and-drop card reordering.
+- Saved host groups (Favorites) — save the current set of targets as a named group and reload with one click; persisted across sessions.
+- Audio alerts — synthesized tone plays on host up/down transitions; can be toggled on/off.
+- Single and bulk IP entry modes; CSV session export (includes alias column).
 - Global KPIs: active monitors, average RTT, average packet loss across all sessions.
 - Per-session health pills (Stable / Jitter / Timeout) with automatic state tracking.
 - In-app notifications on host up/down state transitions.
@@ -44,6 +73,10 @@ NetPulse is a fast, strictly local network diagnostics suite built with **Tauri 
 ### Settings
 - Persistent JSON settings file stored in the Tauri app data directory.
 - Read and written via typed `invoke()` calls; survives app restarts.
+- Stores: ping favorites, audio alert preference, always-on-top state.
+
+### Window Utilities
+- **Always-on-top** — pin the window above all other applications via the pushpin button in the top-right nav; state persists across restarts.
 
 ## Architecture
 

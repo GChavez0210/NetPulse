@@ -799,6 +799,157 @@ button:disabled:hover {
   gap: 0;
 }
 
+/* ── Drag Handle ── */
+.drag-handle {
+  cursor: grab;
+  color: var(--text-dim);
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  font-size: 1rem;
+  line-height: 1;
+  border-radius: var(--radius-xs);
+  transition: color 0.15s;
+  touch-action: none;
+  flex-shrink: 0;
+  box-shadow: none;
+}
+.drag-handle:hover {
+  color: var(--text-muted);
+  background: none;
+  box-shadow: none;
+}
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+/* ── Alias inline edit ── */
+.alias-input {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--accent);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-accent);
+  padding: 0 2px;
+  outline: none;
+  min-width: 80px;
+  max-width: 200px;
+  height: auto;
+  min-height: auto;
+  border-radius: 0;
+}
+
+.alias-edit-btn {
+  background: none;
+  border: none;
+  padding: 0 3px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: color 0.15s;
+  box-shadow: none;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.alias-edit-btn:hover {
+  color: var(--text-muted);
+  background: none;
+  box-shadow: none;
+}
+
+/* ── Interval select ── */
+.interval-select {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--surface-recessed);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  padding: 4px 6px;
+  cursor: pointer;
+  height: 28px;
+}
+.interval-select:hover {
+  border-color: var(--border-accent);
+  color: var(--text);
+}
+.interval-select:focus {
+  outline: none;
+  border-color: var(--border-accent);
+}
+
+/* ── Favorites Panel ── */
+.favorites-panel {
+  margin-bottom: 12px;
+}
+.favorites-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.favorites-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.favorites-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--surface-recessed);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  gap: 8px;
+}
+.favorites-item-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.favorites-item-info strong {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text);
+}
+.favorites-item-hosts {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 480px;
+}
+.favorites-save-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Button state modifiers ── */
+.btn-active {
+  border-color: var(--border-accent) !important;
+  color: var(--accent) !important;
+  background: var(--accent-dim) !important;
+}
+.btn-muted {
+  opacity: 0.5;
+}
+
+/* ── Always-on-top active state ── */
+.nav-icon-btn--active {
+  color: var(--accent);
+  border-color: var(--border-accent);
+  background: var(--accent-dim);
+}
+
 /* ── Trace Panel ── */
 .trace-panel {
   width: 100%;

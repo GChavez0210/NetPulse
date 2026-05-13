@@ -27,7 +27,9 @@
       "Bash(export PATH=\"/c/Users/gabox/.cargo/bin:$PATH\")",
       "Bash(sqlite3 assets/oui-database.sqlite \".tables\")",
       "PowerShell(cd \"C:\\\\Users\\\\gabox\\\\DevProjects\\\\NetPulse\"; $bytes = [System.IO.File]::ReadAllBytes\\(\"assets\\\\oui-database.sqlite\"\\); $text = [System.Text.Encoding]::ASCII.GetString\\($bytes[0..4095]\\); $text -replace '[^\\\\x20-\\\\x7E]', '.')",
-      "PowerShell(\\(Get-Item \"C:\\\\Users\\\\gabox\\\\DevProjects\\\\NetPulse\\\\assets\\\\oui-database.sqlite\"\\).Length; \\(Get-Item \"C:\\\\Users\\\\gabox\\\\DevProjects\\\\NetPulse\\\\src-tauri\\\\target\\\\debug\\\\oui-database.sqlite\"\\).Length)"
+      "PowerShell(\\(Get-Item \"C:\\\\Users\\\\gabox\\\\DevProjects\\\\NetPulse\\\\assets\\\\oui-database.sqlite\"\\).Length; \\(Get-Item \"C:\\\\Users\\\\gabox\\\\DevProjects\\\\NetPulse\\\\src-tauri\\\\target\\\\debug\\\\oui-database.sqlite\"\\).Length)",
+      "WebFetch(domain:github.com)",
+      "Bash(main\\\\.rs\")"
     ]
   }
 }

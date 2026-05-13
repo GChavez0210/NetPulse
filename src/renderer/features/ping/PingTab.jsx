@@ -1,28 +1,43 @@
 import React, { useState, useEffect, useRef, useReducer } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import LineChart from '../../components/LineChart';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { runOnEnter } from '../trace/TraceTab';
+import PingCard from './PingCard';
+import FavoritesPanel from './FavoritesPanel';
 import {
-  HEALTH,
   MAX_ACTIVE_SESSIONS,
   DOWN_THRESHOLD,
   MAX_POINTS,
   getHealth,
   getTestMetrics,
-  createTest
+  createTest,
 } from '../../utils/networkUtils';
 
-function latencyColor(ms) {
-  if (ms == null) return undefined;
-  if (ms <= 50) return 'var(--accent)';
-  if (ms <= 150) return 'var(--warn)';
-  return 'var(--danger)';
-}
-
-function healthPill(health) {
-  if (health === HEALTH.DOWN) return { label: 'TIMEOUT', cls: 'pill-timeout' };
-  if (health === HEALTH.DEGRADED) return { label: 'JITTER', cls: 'pill-jitter' };
-  return { label: 'STABLE', cls: 'pill-stable' };
+function playAlert(type) {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    const t = ctx.currentTime;
+    if (type === 'down') {
+      osc.frequency.setValueAtTime(660, t);
+      osc.frequency.exponentialRampToValueAtTime(220, t + 0.45);
+    } else {
+      osc.frequency.setValueAtTime(330, t);
+      osc.frequency.exponentialRampToValueAtTime(880, t + 0.45);
+    }
+    gain.gain.setValueAtTime(0.25, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.start(t);
+    osc.stop(t + 0.5);
+    setTimeout(() => ctx.close().catch(() => {}), 600);
+  } catch {}
 }
 
 // ---------------------------------------------------------------------------
@@ -42,10 +57,22 @@ function pingReducer(tests, action) {
 
     case 'TOGGLE_VIEW':
       return tests.map((t) =>
-        t.id === action.id
-          ? { ...t, viewMode: t.viewMode === 'graph' ? 'cli' : 'graph' }
-          : t
+        t.id === action.id ? { ...t, viewMode: t.viewMode === 'graph' ? 'cli' : 'graph' } : t
       );
+
+    case 'SET_ALIAS':
+      return tests.map((t) => (t.id === action.id ? { ...t, alias: action.alias } : t));
+
+    case 'SET_INTERVAL':
+      return tests.map((t) => (t.id === action.id ? { ...t, interval: action.interval } : t));
+
+    case 'REORDER': {
+      const { activeId, overId } = action;
+      const oldIdx = tests.findIndex((t) => t.id === activeId);
+      const newIdx = tests.findIndex((t) => t.id === overId);
+      if (oldIdx === -1 || newIdx === -1) return tests;
+      return arrayMove(tests, oldIdx, newIdx);
+    }
 
     case 'APPLY_SAMPLE': {
       const { id, result } = action;
@@ -87,7 +114,7 @@ function pingReducer(tests, action) {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function PingTab({ addNotification }) {
+export default function PingTab({ addNotification, settings, saveSettings }) {
   const [tests, dispatch] = useReducer(pingReducer, []);
   const [hostInput, setHostInput] = useState('');
   const [pingEntryMode, setPingEntryMode] = useState('single');
@@ -95,19 +122,22 @@ export default function PingTab({ addNotification }) {
   const [packetSize, setPacketSize] = useState(56);
   const [dontFragment, setDontFragment] = useState(false);
   const [status, setStatus] = useState('Ready.');
+  const [showFavorites, setShowFavorites] = useState(false);
 
-  // Refs that don't need to trigger re-renders
+  const audioEnabled = settings?.audio_alerts ?? true;
+  const favorites = settings?.ping_favorites ?? [];
+
   const timersRef = useRef(new Map());
   const inFlightRef = useRef(new Set());
-  // Mirror of tests for reading current state in setInterval callbacks (avoids stale closures)
   const testsRef = useRef(tests);
-  // Mirror options for use inside async callbacks
   const packetSizeRef = useRef(packetSize);
   const dontFragmentRef = useRef(dontFragment);
+  const audioEnabledRef = useRef(audioEnabled);
 
   useEffect(() => { testsRef.current = tests; }, [tests]);
   useEffect(() => { packetSizeRef.current = packetSize; }, [packetSize]);
   useEffect(() => { dontFragmentRef.current = dontFragment; }, [dontFragment]);
+  useEffect(() => { audioEnabledRef.current = audioEnabled; }, [audioEnabled]);
 
   useEffect(() => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -120,9 +150,19 @@ export default function PingTab({ addNotification }) {
     };
   }, []);
 
-  const pushNotification = (host, type, text) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
+  );
+
+  const handleDragEnd = ({ active, over }) => {
+    if (over && active.id !== over.id) {
+      dispatch({ type: 'REORDER', activeId: active.id, overId: over.id });
+    }
+  };
+
+  const pushNotification = (host, text) => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      new Notification(`Ping status changed: ${host}`, { body: text });
+      new Notification(`Ping: ${host}`, { body: text });
     }
   };
 
@@ -147,11 +187,11 @@ export default function PingTab({ addNotification }) {
         dontFragment: dontFragmentRef.current,
       });
 
-      // Re-read target after the await so reachable/failureStreak reflect the latest state.
       const freshTarget = testsRef.current.find((t) => t.id === id) ?? target;
       const isSuccess = result.ok && result.latency_ms != null;
       const newStreak = isSuccess ? 0 : freshTarget.failureStreak + 1;
       let notification = null;
+
       if (isSuccess && freshTarget.reachable === false) {
         notification = { type: 'up', text: 'Host recovered and is responding again.' };
       } else if (!isSuccess && newStreak >= DOWN_THRESHOLD && freshTarget.reachable !== false) {
@@ -164,8 +204,10 @@ export default function PingTab({ addNotification }) {
       dispatch({ type: 'APPLY_SAMPLE', id, result });
 
       if (notification) {
-        pushNotification(freshTarget.host, notification.type, notification.text);
-        addNotification?.(notification.type, `${freshTarget.host}: ${notification.text}`);
+        const label = freshTarget.alias || freshTarget.host;
+        pushNotification(label, notification.text);
+        addNotification?.(notification.type, `${label}: ${notification.text}`);
+        if (audioEnabledRef.current) playAlert(notification.type);
       }
     } catch (error) {
       dispatch({
@@ -192,7 +234,8 @@ export default function PingTab({ addNotification }) {
     stopTimer(id);
     dispatch({ type: 'SET_PHASE', id, phase: 'running' });
     samplePing(id);
-    const timer = setInterval(() => samplePing(id), 1000);
+    const interval = target?.interval ?? 1000;
+    const timer = setInterval(() => samplePing(id), interval);
     timersRef.current.set(id, timer);
   };
 
@@ -212,8 +255,18 @@ export default function PingTab({ addNotification }) {
     dispatch({ type: 'REMOVE', id });
   };
 
-  const toggleTestViewMode = (id) => {
-    dispatch({ type: 'TOGGLE_VIEW', id });
+  const setTestAlias = (id, alias) => {
+    dispatch({ type: 'SET_ALIAS', id, alias });
+  };
+
+  const setTestInterval = (id, intervalMs) => {
+    dispatch({ type: 'SET_INTERVAL', id, interval: intervalMs });
+    const target = testsRef.current.find((t) => t.id === id);
+    if (target?.phase === 'running') {
+      stopTimer(id);
+      const timer = setInterval(() => samplePing(id), intervalMs);
+      timersRef.current.set(id, timer);
+    }
   };
 
   const addTest = () => {
@@ -278,6 +331,7 @@ export default function PingTab({ addNotification }) {
     testsRef.current.forEach((t) => pauseTest(t.id));
     setStatus('All tests paused.');
   };
+
   const stopAll = () => {
     testsRef.current.forEach((t) => stopTest(t.id));
     setStatus('All tests stopped.');
@@ -286,11 +340,12 @@ export default function PingTab({ addNotification }) {
   const exportSession = () => {
     const rows = tests.map((t) => {
       const m = getTestMetrics(t);
-      const { label } = healthPill(getHealth(t));
+      const health = getHealth(t);
       const loss = t.sent > 0 ? ((t.sent - t.received) / t.sent * 100).toFixed(2) : '0.00';
-      return [t.host, m.avg?.toFixed(1) ?? '--', m.max?.toFixed(1) ?? '--', loss, label].join(',');
+      const healthLabel = health === 'down' ? 'TIMEOUT' : health === 'degraded' ? 'JITTER' : 'STABLE';
+      return [t.alias || t.host, t.host, m.avg?.toFixed(1) ?? '--', m.max?.toFixed(1) ?? '--', loss, healthLabel].join(',');
     });
-    const csv = ['Host,Avg RTT (ms),Max RTT (ms),Loss %,Status', ...rows].join('\n');
+    const csv = ['Alias,Host,Avg RTT (ms),Max RTT (ms),Loss %,Status', ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -298,6 +353,28 @@ export default function PingTab({ addNotification }) {
     a.download = `netpulse-session-${Date.now()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const saveFavoriteGroup = (name) => {
+    const hosts = testsRef.current.map((t) => t.host);
+    saveSettings?.({ ping_favorites: [...favorites, { name, hosts }] });
+  };
+
+  const loadFavoriteGroup = (hosts) => {
+    const existing = new Set(testsRef.current.map((t) => t.host.toLowerCase()));
+    const toAdd = hosts.filter((h) => !existing.has(h.toLowerCase()));
+    const newTests = toAdd.map((host) => createTest(host));
+    for (const test of newTests) dispatch({ type: 'ADD', test });
+    setTimeout(() => newTests.forEach((t) => startTest(t.id)), 0);
+    setStatus(
+      newTests.length > 0
+        ? `Loaded ${newTests.length} host(s) from group.`
+        : 'All hosts from this group are already active.'
+    );
+  };
+
+  const deleteFavoriteGroup = (idx) => {
+    saveSettings?.({ ping_favorites: favorites.filter((_, i) => i !== idx) });
   };
 
   // KPI computations
@@ -414,6 +491,13 @@ export default function PingTab({ addNotification }) {
           <button className="secondary" onClick={startAll}>Start All</button>
           <button className="secondary" onClick={pauseAll} disabled={tests.length === 0}>Pause All</button>
           <button className="danger" onClick={stopAll} disabled={tests.length === 0}>Stop All</button>
+          <button className="secondary" onClick={exportSession} disabled={tests.length === 0}>Export CSV</button>
+          <button
+            className={`secondary${showFavorites ? ' btn-active' : ''}`}
+            onClick={() => setShowFavorites((v) => !v)}
+          >
+            Groups{favorites.length > 0 ? ` (${favorites.length})` : ''}
+          </button>
         </div>
 
         <div className="ping-options-row">
@@ -440,108 +524,43 @@ export default function PingTab({ addNotification }) {
         </div>
       </div>
 
+      {/* Favorites Panel */}
+      {showFavorites && (
+        <FavoritesPanel
+          favorites={favorites}
+          currentHosts={tests.map((t) => t.host)}
+          onLoad={loadFavoriteGroup}
+          onSave={saveFavoriteGroup}
+          onDelete={deleteFavoriteGroup}
+          onClose={() => setShowFavorites(false)}
+        />
+      )}
+
       {/* Monitor Grid */}
-      <section className="tests-grid ping-grid">
-        {tests.length === 0 && (
-          <p className="empty" style={{ gridColumn: '1 / -1' }}>
-            No active monitors. Add a target to begin.
-          </p>
-        )}
-        {tests.map((test) => {
-          const health = getHealth(test);
-          const uptime = test.sent > 0 ? ((test.received / test.sent) * 100).toFixed(1) : '0.0';
-          const m = getTestMetrics(test);
-          const { label: pillLabel, cls: pillCls } = healthPill(health);
-
-          return (
-            <article key={test.id} className="test-card ping-card">
-              <div className="test-head">
-                <div>
-                  <div className="target-title">
-                    <span className={`status-light ${health}`} />
-                    <h3
-                      style={{
-                        color:
-                          health === 'normal'
-                            ? 'var(--accent)'
-                            : health === 'degraded'
-                            ? 'var(--warn)'
-                            : health === 'down'
-                            ? 'var(--danger)'
-                            : 'var(--text)',
-                      }}
-                    >
-                      {test.host}
-                    </h3>
-                  </div>
-                  <p className="target-sub">
-                    {test.phase.toUpperCase()} &bull; UPTIME {uptime}%
-                  </p>
-                </div>
-                <span className={`status-pill ${pillCls}`}>{pillLabel}</span>
-              </div>
-
-              {test.viewMode === 'graph' ? (
-                <LineChart
-                  points={test.points}
-                  health={health}
-                  liveLabel={pillLabel}
-                  events={test.events}
-                />
-              ) : (
-                <pre style={{ marginBottom: 8 }}>{test.lastOutput}</pre>
-              )}
-
-              <div className="metric-row">
-                <article className="metric-box">
-                  <span>Current</span>
-                  <strong style={{ color: latencyColor(m.current) }}>
-                    {m.current != null ? `${m.current.toFixed(0)}ms` : '--'}
-                  </strong>
-                </article>
-                <article className="metric-box">
-                  <span>Average</span>
-                  <strong style={{ color: latencyColor(m.avg) }}>
-                    {m.avg != null ? `${m.avg.toFixed(0)}ms` : '--'}
-                  </strong>
-                </article>
-                <article className="metric-box">
-                  <span>Max</span>
-                  <strong style={{ color: latencyColor(m.max) }}>
-                    {m.max != null ? `${m.max.toFixed(0)}ms` : '--'}
-                  </strong>
-                </article>
-              </div>
-
-              <div className="card-actions">
-                <button className="secondary" onClick={() => toggleTestViewMode(test.id)}>
-                  {test.viewMode === 'graph' ? 'CLI View' : 'Graph View'}
-                </button>
-                <button onClick={() => startTest(test.id)} disabled={test.phase === 'running'}>
-                  Resume
-                </button>
-                <button
-                  className="secondary"
-                  onClick={() => pauseTest(test.id)}
-                  disabled={test.phase !== 'running'}
-                >
-                  Pause
-                </button>
-                <button
-                  className="danger"
-                  onClick={() => stopTest(test.id)}
-                  disabled={test.phase === 'stopped'}
-                >
-                  Stop
-                </button>
-                <button className="danger" onClick={() => removeTest(test.id)}>
-                  Remove
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </section>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={tests.map((t) => t.id)} strategy={rectSortingStrategy}>
+          <section className="tests-grid ping-grid">
+            {tests.length === 0 && (
+              <p className="empty" style={{ gridColumn: '1 / -1' }}>
+                No active monitors. Add a target to begin.
+              </p>
+            )}
+            {tests.map((test) => (
+              <PingCard
+                key={test.id}
+                test={test}
+                onStart={startTest}
+                onPause={pauseTest}
+                onStop={stopTest}
+                onRemove={removeTest}
+                onToggleView={(id) => dispatch({ type: 'TOGGLE_VIEW', id })}
+                onSetAlias={setTestAlias}
+                onSetInterval={setTestInterval}
+              />
+            ))}
+          </section>
+        </SortableContext>
+      </DndContext>
 
       {status !== 'Ready.' && <div className="status-toast">{status}</div>}
     </section>

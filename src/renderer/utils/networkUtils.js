@@ -1,6 +1,6 @@
 export const MAX_POINTS = 60;
 export const DOWN_THRESHOLD = 3;
-export const MAX_ACTIVE_SESSIONS = 8;
+export const MAX_ACTIVE_SESSIONS = 16;
 
 export const HEALTH = {
   NORMAL: 'normal',
@@ -172,6 +172,8 @@ export function createTest(host) {
   return {
     id: `${host}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     host,
+    alias: '',
+    interval: 1000,
     phase: 'running',
     reachable: null,
     failureStreak: 0,
