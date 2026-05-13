@@ -7,3 +7,6 @@ dist
 # Tauri / Rust
 src-tauri/target/
 src-tauri/gen/
+
+# Claude Code local settings (personal allowlists, local paths)
+.claude/
