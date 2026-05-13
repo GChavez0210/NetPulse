@@ -7,7 +7,7 @@ NetPulse is a fast, strictly local network diagnostics suite built with **Tauri 
 ## Features
 
 ### Multi-Target Ping
-- Monitor up to 16 hosts simultaneously via continuous ICMP sampling with live Recharts latency graphs.
+- Monitor multiple hosts simultaneously via continuous ICMP sampling with live Recharts latency graphs.
 - Configurable packet size and DF (Don't Fragment) flag per session.
 - Per-session custom ping interval (0.5s, 1s, 2s, 5s, 10s).
 - Host aliases — set a friendly display name per monitor (double-click or pencil icon).
