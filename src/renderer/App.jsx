@@ -7,7 +7,7 @@ import PingTab from './features/ping/PingTab';
 import TraceTab from './features/trace/TraceTab';
 import FloodTestTab from './features/flood/FloodTestTab';
 import DiagnosticsTab from './features/diagnostics/DiagnosticsTab';
-import WhoisTab from './features/whois/WhoisTab';
+import ReconTab from './features/recon/ReconTab';
 
 function App() {
   const [activeTab, setActiveTab] = useState('ping');
@@ -94,8 +94,8 @@ function App() {
           <div className={activeTab !== 'diagnostics' ? 'tab-hidden' : undefined}>
             <DiagnosticsTab />
           </div>
-          <div className={activeTab !== 'whois' ? 'tab-hidden' : undefined}>
-            <WhoisTab />
+          <div className={activeTab !== 'recon' ? 'tab-hidden' : undefined}>
+            <ReconTab />
           </div>
 
           <footer className="attribution-footer">

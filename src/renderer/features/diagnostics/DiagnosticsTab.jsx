@@ -1,38 +1,60 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { runOnEnter } from '../trace/TraceTab';
+import { buildWhoisPresentation } from '../../utils/networkUtils';
 
 export default function DiagnosticsTab() {
+  // TCP Ping
   const [tcpHostInput, setTcpHostInput] = useState('');
   const [tcpPort, setTcpPort] = useState(443);
   const [tcpResult, setTcpResult] = useState(null);
 
+  // MTR
   const [mtrHostInput, setMtrHostInput] = useState('');
   const [mtrRounds, setMtrRounds] = useState(5);
   const [mtrLoading, setMtrLoading] = useState(false);
   const [mtrResult, setMtrResult] = useState(null);
 
+  // DNS Toolkit
   const [dnsHostInput, setDnsHostInput] = useState('');
   const [dnsType, setDnsType] = useState('A');
   const [dnsResult, setDnsResult] = useState(null);
 
+  // Port Scanner
   const [portScanHostInput, setPortScanHostInput] = useState('');
   const [portListInput, setPortListInput] = useState('22,80,443,3389');
   const [portScanResult, setPortScanResult] = useState(null);
 
+  // DNS Validation
   const [dnsValInput, setDnsValInput] = useState('');
   const [dnsValLoading, setDnsValLoading] = useState(false);
   const [dnsValResult, setDnsValResult] = useState(null);
 
+  // Multi-Resolver Health
   const [dnsHealthInput, setDnsHealthInput] = useState('');
   const [dnsHealthLoading, setDnsHealthLoading] = useState(false);
   const [dnsHealthResult, setDnsHealthResult] = useState(null);
 
+  // DMARC Inspector
   const [dmarcInput, setDmarcInput] = useState('');
   const [dmarcLoading, setDmarcLoading] = useState(false);
   const [dmarcResult, setDmarcResult] = useState(null);
 
+  // WHOIS
+  const [whoisInput, setWhoisInput] = useState('');
+  const [whoisData, setWhoisData] = useState(null);
+  const [whoisLoading, setWhoisLoading] = useState(false);
+
+  // MAC OUI
+  const [macInput, setMacInput] = useState('');
+  const [macLoading, setMacLoading] = useState(false);
+  const [macResult, setMacResult] = useState(null);
+
   const [status, setStatus] = useState('Ready.');
+
+  const whoisPresentation = buildWhoisPresentation(whoisData, whoisInput.trim());
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleTcpPing = async () => {
     const host = tcpHostInput.trim();
@@ -161,6 +183,50 @@ export default function DiagnosticsTab() {
     }
   };
 
+  const handleWhoisLookup = async () => {
+    const domain = whoisInput.trim();
+    if (!domain) return;
+    setWhoisLoading(true);
+    setWhoisData(null);
+    setStatus(`Running WHOIS lookup for ${domain}...`);
+    try {
+      const result = await invoke('whois_lookup', { query: domain });
+      if (result.ok) {
+        setWhoisData({ normalized: result.normalized, raw: result.raw, source: result.source || 'Apilayer', data: result.normalized });
+        setStatus(`WHOIS lookup complete via ${result.source || 'Apilayer'}.`);
+        setWhoisInput('');
+      } else {
+        setWhoisData(result.normalized ?? { error: result.error });
+        setStatus(result.error || 'WHOIS lookup failed.');
+      }
+    } catch (error) {
+      setWhoisData({ error: String(error?.message || error) });
+      setStatus('WHOIS lookup failed.');
+    } finally {
+      setWhoisLoading(false);
+    }
+  };
+
+  const handleMacLookup = async () => {
+    const target = macInput.trim();
+    if (!target) return;
+    setMacLoading(true);
+    setMacResult(null);
+    setStatus('Looking up hardware database...');
+    try {
+      const res = await invoke('mac_lookup', { mac: target });
+      setMacResult(res);
+      setStatus(res.ok ? 'MAC lookup complete.' : 'MAC lookup failed.');
+      if (res.ok) setMacInput('');
+    } catch (e) {
+      const msg = String(e?.message || e);
+      setMacResult({ ok: false, error: msg });
+      setStatus(`MAC lookup error: ${msg}`);
+    } finally {
+      setMacLoading(false);
+    }
+  };
+
   const handleCopyRaw = async (text) => {
     if (!text) return;
     try {
@@ -169,6 +235,30 @@ export default function DiagnosticsTab() {
     } catch {
       setStatus('Failed to copy text.');
     }
+  };
+
+  const handleCopyWhois = async () => {
+    if (!whoisData) return;
+    try {
+      await navigator.clipboard.writeText(whoisPresentation.text);
+      setStatus('WHOIS results copied.');
+    } catch {
+      setStatus('Could not copy WHOIS results.');
+    }
+  };
+
+  const handleExportWhoisTxt = () => {
+    if (!whoisData) return;
+    const blob = new Blob([whoisPresentation.text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `whois-${whoisPresentation.queryDomain || 'lookup'}-${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setStatus('WHOIS TXT exported.');
   };
 
   const formatDnsResult = (result) => {
@@ -193,18 +283,18 @@ export default function DiagnosticsTab() {
 
   return (
     <section className="diagnostics-hub">
-      {/* Header */}
       <div className="page-header">
         <div className="page-title-block">
           <span className="page-tag">
             <span className="page-tag-dot" />
-            ANALYTICS ENGINE
+            DIAGNOSTICS
           </span>
-          <h1>Network Analytics</h1>
+          <h1>Network Diagnostics &amp; Identity</h1>
         </div>
       </div>
 
       <div className="diagnostics-grid">
+
         {/* TCP Ping */}
         <article className="diag-card">
           <h3>TCP Ping (SYN Reachability)</h3>
@@ -216,7 +306,6 @@ export default function DiagnosticsTab() {
               placeholder="Enter a hostname"
             />
             <input
-              id="tcpPort"
               type="number"
               min="1"
               max="65535"
@@ -243,7 +332,6 @@ export default function DiagnosticsTab() {
               placeholder="Enter a hostname"
             />
             <input
-              id="mtrRounds"
               type="number"
               min="2"
               max="30"
@@ -272,7 +360,6 @@ export default function DiagnosticsTab() {
               placeholder="Enter a domain"
             />
             <select
-              id="dnsType"
               value={dnsType}
               onChange={(e) => setDnsType(e.target.value)}
               style={{ width: 90, flex: '0 0 90px' }}
@@ -300,7 +387,6 @@ export default function DiagnosticsTab() {
               placeholder="Enter a hostname"
             />
             <input
-              id="portList"
               value={portListInput}
               onChange={(e) => setPortListInput(e.target.value)}
               placeholder="80,443,3389"
@@ -396,6 +482,79 @@ export default function DiagnosticsTab() {
             )}
           </div>
         </article>
+
+        {/* WHOIS Lookup */}
+        <article className="diag-card">
+          <h3>WHOIS Lookup</h3>
+          <div className="diag-controls">
+            <input
+              value={whoisInput}
+              onChange={(e) => setWhoisInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleWhoisLookup)}
+              placeholder="hostname or IP"
+            />
+          </div>
+          <button className="diag-run-btn" onClick={handleWhoisLookup} disabled={whoisLoading}>
+            {whoisLoading ? 'Running...' : 'WHOIS Lookup'}
+          </button>
+
+          {whoisData ? (
+            <div className="diag-result-container">
+              <div className="whois-inline-actions" style={{ marginBottom: 6 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                  Query: {whoisPresentation.queryDomain}
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="copy-sm-btn secondary" onClick={handleCopyWhois}>Copy</button>
+                  <button className="copy-sm-btn secondary" onClick={handleExportWhoisTxt}>Export</button>
+                </div>
+              </div>
+              <pre className="diag-log-pre" style={{ fontSize: '0.78rem' }}>
+                {whoisPresentation.lines && whoisPresentation.lines.length > 0
+                  ? whoisPresentation.lines.map((line, i) => {
+                      if (line.type === 'blank') return <div key={i}>&nbsp;</div>;
+                      if (line.type === 'comment') return <div key={i} className="whois-comment">{line.value}</div>;
+                      if (line.type === 'section') return <div key={i} className="whois-section">{line.value}</div>;
+                      return (
+                        <div key={i}>
+                          <span className="whois-label">{line.label}:</span>{' '}
+                          <span className="whois-value">{line.value}</span>
+                        </div>
+                      );
+                    })
+                  : <div className="whois-value">{whoisPresentation.text}</div>}
+              </pre>
+            </div>
+          ) : (
+            <pre className="diag-log-pre">No WHOIS result yet.</pre>
+          )}
+        </article>
+
+        {/* MAC OUI */}
+        <article className="diag-card">
+          <h3>MAC Address OUI Matcher</h3>
+          <div className="diag-controls">
+            <input
+              value={macInput}
+              onChange={(e) => setMacInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleMacLookup)}
+              placeholder="00:1A:2B:3C:4D:5E"
+            />
+          </div>
+          <button className="diag-run-btn" onClick={handleMacLookup} disabled={macLoading}>
+            {macLoading ? 'Looking up...' : 'Lookup Vendor'}
+          </button>
+          {macResult ? (
+            <pre className="diag-log-pre">
+              {macResult.ok
+                ? (macResult.raw_output || macResult.rawOutput)
+                : `Error: ${macResult.error || 'Unknown error'}`}
+            </pre>
+          ) : (
+            <pre className="diag-log-pre">No MAC result yet.</pre>
+          )}
+        </article>
+
       </div>
 
       {status !== 'Ready.' && <div className="status-toast">{status}</div>}

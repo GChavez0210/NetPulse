@@ -1367,6 +1367,13 @@ strong.critical { color: var(--danger); }
   margin: 0;
 }
 
+.diag-card-desc {
+  font-size: 0.72rem;
+  color: var(--text-dim, #6b7fa3);
+  margin: 2px 0 8px;
+  line-height: 1.4;
+}
+
 .diag-controls {
   display: flex;
   gap: 8px;

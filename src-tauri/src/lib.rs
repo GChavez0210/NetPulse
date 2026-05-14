@@ -69,6 +69,10 @@ pub fn run() {
             commands::geoip::geoip_lookup,
             commands::settings::settings_read,
             commands::settings::settings_write,
+            commands::recon::ssl_inspect,
+            commands::recon::http_headers,
+            commands::recon::subdomains_lookup,
+            commands::recon::tech_detect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

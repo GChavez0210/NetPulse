@@ -4,8 +4,8 @@ const TABS = [
   { id: 'ping', label: 'Multi-Target Ping' },
   { id: 'trace', label: 'Topology' },
   { id: 'packetloss', label: 'Flood Test' },
-  { id: 'diagnostics', label: 'Analytics' },
-  { id: 'whois', label: 'Identity' }
+  { id: 'diagnostics', label: 'Diagnostics' },
+  { id: 'recon', label: 'Recon' },
 ];
 
 export default function TopNav({

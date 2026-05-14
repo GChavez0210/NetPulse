@@ -6,5 +6,6 @@ pub mod ping;
 pub mod settings;
 pub mod tcp;
 pub mod trace;
+pub mod recon;
 pub mod validation;
 pub mod whois;
