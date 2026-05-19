@@ -14,15 +14,15 @@ export default function ReconTab() {
   const [headersLoading, setHeadersLoading] = useState(false);
   const [headersResult, setHeadersResult] = useState(null);
 
-  // Subdomains
-  const [subDomain, setSubDomain] = useState('');
-  const [subLoading, setSubLoading] = useState(false);
-  const [subResult, setSubResult] = useState(null);
-
   // Tech Detect
   const [techUrl, setTechUrl] = useState('');
   const [techLoading, setTechLoading] = useState(false);
   const [techResult, setTechResult] = useState(null);
+
+  // MAC OUI
+  const [macInput, setMacInput] = useState('');
+  const [macLoading, setMacLoading] = useState(false);
+  const [macResult, setMacResult] = useState(null);
 
   const [status, setStatus] = useState('Ready.');
 
@@ -76,25 +76,6 @@ export default function ReconTab() {
     }
   };
 
-  const handleSubdomains = async () => {
-    const domain = subDomain.trim();
-    if (!domain) { setStatus('Enter a domain name.'); return; }
-    setSubLoading(true);
-    setSubResult(null);
-    setStatus(`Querying Certificate Transparency logs for ${domain}...`);
-    try {
-      const res = await invoke('subdomains_lookup', { domain });
-      setSubResult(res);
-      setStatus(res.ok ? `Found ${res.count} subdomains for ${domain}.` : `Subdomain error: ${res.error}`);
-      if (res.ok) setSubDomain('');
-    } catch (e) {
-      setSubResult({ ok: false, error: String(e?.message || e) });
-      setStatus('Subdomain enumeration failed.');
-    } finally {
-      setSubLoading(false);
-    }
-  };
-
   const handleTechDetect = async () => {
     const url = techUrl.trim();
     if (!url) { setStatus('Enter a URL or hostname.'); return; }
@@ -111,6 +92,26 @@ export default function ReconTab() {
       setStatus('Technology detection failed.');
     } finally {
       setTechLoading(false);
+    }
+  };
+
+  const handleMacLookup = async () => {
+    const target = macInput.trim();
+    if (!target) { setStatus('Enter a MAC address.'); return; }
+    setMacLoading(true);
+    setMacResult(null);
+    setStatus('Looking up hardware database...');
+    try {
+      const res = await invoke('mac_lookup', { mac: target });
+      setMacResult(res);
+      setStatus(res.ok ? 'MAC lookup complete.' : 'MAC lookup failed.');
+      if (res.ok) setMacInput('');
+    } catch (e) {
+      const msg = String(e?.message || e);
+      setMacResult({ ok: false, error: msg });
+      setStatus(`MAC lookup error: ${msg}`);
+    } finally {
+      setMacLoading(false);
     }
   };
 
@@ -160,7 +161,7 @@ export default function ReconTab() {
             {sslLoading ? 'Inspecting...' : 'Inspect Certificate'}
           </button>
 
-          {sslResult && (
+          {sslResult ? (
             <div className="diag-result-container">
               {sslResult.ok && (
                 <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -186,8 +187,7 @@ export default function ReconTab() {
                 </button>
               )}
             </div>
-          )}
-          {!sslResult && (
+          ) : (
             <pre className="diag-log-pre">No result yet.</pre>
           )}
         </article>
@@ -210,10 +210,10 @@ export default function ReconTab() {
             {headersLoading ? 'Fetching...' : 'Fetch Headers'}
           </button>
 
-          {headersResult && (
+          {headersResult ? (
             <div className="diag-result-container">
               {headersResult.ok && headersResult.status && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                   <span
                     className={
                       headersResult.status < 300
@@ -236,48 +236,7 @@ export default function ReconTab() {
                 </button>
               )}
             </div>
-          )}
-          {!headersResult && (
-            <pre className="diag-log-pre">No result yet.</pre>
-          )}
-        </article>
-
-        {/* ── Subdomain Enumeration ───────────────────────────────────────── */}
-        <article className="diag-card">
-          <h3>Subdomain Enumeration</h3>
-          <p className="diag-card-desc">
-            Certificate Transparency logs via crt.sh.
-          </p>
-          <div className="diag-controls">
-            <input
-              value={subDomain}
-              onChange={(e) => setSubDomain(e.target.value)}
-              onKeyDown={(e) => runOnEnter(e, handleSubdomains)}
-              placeholder="example.com"
-            />
-          </div>
-          <button className="diag-run-btn" onClick={handleSubdomains} disabled={subLoading}>
-            {subLoading ? 'Querying CT logs...' : 'Enumerate Subdomains'}
-          </button>
-
-          {subResult && (
-            <div className="diag-result-container">
-              {subResult.ok && (
-                <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                  <span className="pill-stable">{subResult.count} found</span>
-                </div>
-              )}
-              <pre className="diag-log-pre">
-                {subResult.raw_output || (subResult.error ? `Error: ${subResult.error}` : '')}
-              </pre>
-              {subResult.raw_output && (
-                <button className="copy-sm-btn secondary" onClick={() => copyText(subResult.raw_output)}>
-                  Copy
-                </button>
-              )}
-            </div>
-          )}
-          {!subResult && (
+          ) : (
             <pre className="diag-log-pre">No result yet.</pre>
           )}
         </article>
@@ -300,7 +259,7 @@ export default function ReconTab() {
             {techLoading ? 'Detecting...' : 'Detect Technologies'}
           </button>
 
-          {techResult && (
+          {techResult ? (
             <div className="diag-result-container">
               {techResult.ok && techResult.technologies?.length > 0 && (
                 <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -321,8 +280,36 @@ export default function ReconTab() {
                 </button>
               )}
             </div>
+          ) : (
+            <pre className="diag-log-pre">No result yet.</pre>
           )}
-          {!techResult && (
+        </article>
+
+        {/* ── MAC Address OUI Matcher ─────────────────────────────────────── */}
+        <article className="diag-card">
+          <h3>MAC Address OUI Matcher</h3>
+          <p className="diag-card-desc">
+            Identify hardware vendor from a MAC address.
+          </p>
+          <div className="diag-controls">
+            <input
+              value={macInput}
+              onChange={(e) => setMacInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleMacLookup)}
+              placeholder="00:1A:2B:3C:4D:5E"
+            />
+          </div>
+          <button className="diag-run-btn" onClick={handleMacLookup} disabled={macLoading}>
+            {macLoading ? 'Looking up...' : 'Lookup Vendor'}
+          </button>
+
+          {macResult ? (
+            <pre className="diag-log-pre">
+              {macResult.ok
+                ? (macResult.raw_output || macResult.rawOutput)
+                : `Error: ${macResult.error || 'Unknown error'}`}
+            </pre>
+          ) : (
             <pre className="diag-log-pre">No result yet.</pre>
           )}
         </article>

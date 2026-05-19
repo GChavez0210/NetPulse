@@ -45,11 +45,6 @@ export default function DiagnosticsTab() {
   const [whoisData, setWhoisData] = useState(null);
   const [whoisLoading, setWhoisLoading] = useState(false);
 
-  // MAC OUI
-  const [macInput, setMacInput] = useState('');
-  const [macLoading, setMacLoading] = useState(false);
-  const [macResult, setMacResult] = useState(null);
-
   const [status, setStatus] = useState('Ready.');
 
   const whoisPresentation = buildWhoisPresentation(whoisData, whoisInput.trim());
@@ -204,26 +199,6 @@ export default function DiagnosticsTab() {
       setStatus('WHOIS lookup failed.');
     } finally {
       setWhoisLoading(false);
-    }
-  };
-
-  const handleMacLookup = async () => {
-    const target = macInput.trim();
-    if (!target) return;
-    setMacLoading(true);
-    setMacResult(null);
-    setStatus('Looking up hardware database...');
-    try {
-      const res = await invoke('mac_lookup', { mac: target });
-      setMacResult(res);
-      setStatus(res.ok ? 'MAC lookup complete.' : 'MAC lookup failed.');
-      if (res.ok) setMacInput('');
-    } catch (e) {
-      const msg = String(e?.message || e);
-      setMacResult({ ok: false, error: msg });
-      setStatus(`MAC lookup error: ${msg}`);
-    } finally {
-      setMacLoading(false);
     }
   };
 
@@ -527,31 +502,6 @@ export default function DiagnosticsTab() {
             </div>
           ) : (
             <pre className="diag-log-pre">No WHOIS result yet.</pre>
-          )}
-        </article>
-
-        {/* MAC OUI */}
-        <article className="diag-card">
-          <h3>MAC Address OUI Matcher</h3>
-          <div className="diag-controls">
-            <input
-              value={macInput}
-              onChange={(e) => setMacInput(e.target.value)}
-              onKeyDown={(e) => runOnEnter(e, handleMacLookup)}
-              placeholder="00:1A:2B:3C:4D:5E"
-            />
-          </div>
-          <button className="diag-run-btn" onClick={handleMacLookup} disabled={macLoading}>
-            {macLoading ? 'Looking up...' : 'Lookup Vendor'}
-          </button>
-          {macResult ? (
-            <pre className="diag-log-pre">
-              {macResult.ok
-                ? (macResult.raw_output || macResult.rawOutput)
-                : `Error: ${macResult.error || 'Unknown error'}`}
-            </pre>
-          ) : (
-            <pre className="diag-log-pre">No MAC result yet.</pre>
           )}
         </article>
 
