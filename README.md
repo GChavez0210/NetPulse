@@ -49,25 +49,22 @@ Visual hop-by-hop traceroute with automatic GeoIP enrichment.
 - Background GeoIP enrichment — country, city, org, and ASN fetched after the trace completes
 - CSV export of full hop analysis including geographic and ASN data
 
-### 📊 Advanced Analytics (7 tools)
-- **TCP Ping** — SYN reachability test with RTT on any port
-- **MTR-style** — multi-round traceroute aggregation; per-hop loss %, avg / best / worst RTT, worst-hop identification
-- **DNS Toolkit** — query A, AAAA, MX, NS, CNAME, PTR records against both the system resolver and Google (8.8.8.8) simultaneously
-- **Port Scanner Lite** — concurrent TCP connect scan across up to 32 ports
-- **DNS Validation** — checks A, AAAA, NS, SOA, CAA presence with a health score (0–100)
-- **Multi-Resolver Health** — compares A / AAAA / NS records across System, Cloudflare (1.1.1.1), and Google (8.8.8.8) to detect split-horizon or poisoning
-- **DMARC Inspector** — fetches and parses `_dmarc.<domain>` TXT records, validates policy tags
+### 📊 Advanced Diagnostics (8 tools)
+- **TCP Ping** — SYN reachability test with RTT on any port; configurable target port (default 443)
+- **MTR-style** — multi-round traceroute aggregation with configurable round count; per-hop loss %, avg / best / worst RTT, and worst-hop identification
+- **DNS Toolkit** — query A, AAAA, MX, NS, CNAME, or PTR records against both the system resolver and Google (8.8.8.8) simultaneously; results shown side-by-side
+- **Port Scanner Lite** — concurrent TCP connect scan across up to 32 ports at once; comma-separated port list input; 900 ms per-port timeout
+- **DNS Validation** — checks for presence of A, AAAA, NS, SOA, and CAA records and produces a health score from 0–100 with per-check pass/fail detail
+- **Multi-Resolver Health** — compares A, AAAA, and NS records across System, Cloudflare (1.1.1.1), and Google (8.8.8.8) resolvers to surface split-horizon configurations or DNS poisoning
+- **DMARC Inspector** — fetches the `_dmarc.<domain>` TXT record, parses all policy tags (`v`, `p`, `rua`, `ruf`, `pct`, etc.), and flags missing or misconfigured values
+- **WHOIS / RDAP** — API-key-free. IPv4/IPv6 addresses use the RDAP protocol with IANA bootstrapping to the correct RIR (ARIN, RIPE, APNIC, LACNIC, AFRINIC); domains follow the IANA referral chain via raw Port 43 TCP sockets to the authoritative registrar WHOIS server; results include copy and TXT export
 
 ### 🔍 Recon Toolkit (4 tools)
-Passive reconnaissance tools for domains and web targets.
-- **SSL/TLS Inspection** — full certificate chain analysis: TLS version (1.2/1.3), subject, issuer, serial number, Subject Alternative Names, chain depth, expiry countdown, and expired flag
-- **HTTP Headers** — HEAD/GET inspector showing the final URL after redirects, HTTP status code, and all response headers
-- **Subdomain Enumeration** — queries crt.sh Certificate Transparency logs to discover subdomains registered under a domain; deduplicates and sorts results
-- **Technology Detection** — fingerprints a URL via response headers and HTML body patterns; detects CMSs, JS frameworks, CDNs, e-commerce platforms, analytics tools, and more
-
-### 🗄 Registry & Hardware Identity
-- **WHOIS / RDAP** — API-key-free. IPv4/IPv6 addresses use the RDAP protocol with IANA bootstrapping to the correct RIR (ARIN, RIPE, APNIC, LACNIC, AFRINIC); domains follow the IANA referral chain via raw Port 43 TCP sockets to the authoritative registrar WHOIS server
-- **MAC OUI Matcher** — sub-millisecond hardware vendor lookups against a bundled SQLite database (~5.8 MB, opened read-only at startup). No internet access required
+Passive reconnaissance tools for domains, hosts, and web targets.
+- **SSL/TLS Inspector** — full certificate chain analysis: TLS version (1.2/1.3), subject, issuer, serial number, Subject Alternative Names, chain depth, expiry countdown in days, and expired/valid status pill; configurable port (default 443)
+- **HTTP Headers** — sends a HEAD request (falls back to GET on 405) and displays the final URL after all redirects, HTTP status code, and the complete set of response headers
+- **Tech Detect** — fingerprints a URL via response headers and HTML body patterns; identifies CMSs (WordPress, Drupal, Joomla, Ghost), e-commerce platforms (Shopify, WooCommerce, PrestaShop), JS frameworks (React, Vue, Angular, Next.js, Nuxt, Svelte), CSS frameworks (Bootstrap, Tailwind), CDNs (Cloudflare, Varnish), cloud providers (AWS, Azure), analytics tools (Google Analytics, GTM, Matomo), and more
+- **MAC Address OUI Matcher** — identifies the hardware vendor from a MAC address using a bundled SQLite OUI database (~5.8 MB); sub-millisecond lookups with no internet access required; accepts colon, hyphen, or dot-separated MAC formats
 
 ### 🔔 In-App Notifications
 - Persistent notification panel accessible from the top nav
