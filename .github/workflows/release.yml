@@ -1,0 +1,100 @@
+name: Release
+
+# Triggers on any tag push matching v* (e.g. v0.5.0, v1.0.0-beta.1)
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write   # Required to create and upload to GitHub Releases
+
+    strategy:
+      fail-fast: false  # Let all platforms finish even if one fails
+      matrix:
+        include:
+          # ── Windows x64 ───────────────────────────────────────────────────
+          - platform: windows-latest
+            rust-target: ''
+            args: ''
+
+          # ── Linux x64 (produces .AppImage + .deb) ────────────────────────
+          - platform: ubuntu-22.04
+            rust-target: ''
+            args: ''
+
+          # ── macOS Apple Silicon (M1 / M2 / M3) ───────────────────────────
+          - platform: macos-latest
+            rust-target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
+
+          # ── macOS Intel ───────────────────────────────────────────────────
+          - platform: macos-13
+            rust-target: x86_64-apple-darwin
+            args: '--target x86_64-apple-darwin'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Node.js ────────────────────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      # ── Rust ───────────────────────────────────────────────────────────────
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Rust cross-compile target (macOS only)
+        if: matrix.rust-target != ''
+        run: rustup target add ${{ matrix.rust-target }}
+
+      # ── Linux system libraries required by WebKit / Tauri ─────────────────
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      # ── Frontend ───────────────────────────────────────────────────────────
+      - name: Install Node dependencies
+        run: npm ci
+
+      # ── Build + Publish ────────────────────────────────────────────────────
+      - name: Build Tauri app and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'NetPulse ${{ github.ref_name }}'
+          releaseBody: |
+            See [CHANGELOG.md](https://github.com/GChavez0210/NetPulse/blob/main/CHANGELOG.md) for full release notes.
+
+            ---
+
+            ### Downloads
+
+            | Platform | Installer |
+            |---|---|
+            | **Windows 10/11** (x64) | `NetPulse_*_x64-setup.exe` |
+            | **Linux** (x64) | `NetPulse_*_amd64.AppImage` &nbsp;·&nbsp; `NetPulse_*_amd64.deb` |
+            | **macOS** (Apple Silicon) | `NetPulse_*_aarch64.dmg` |
+            | **macOS** (Intel) | `NetPulse_*_x64.dmg` |
+
+            > **macOS note:** Builds are unsigned. Right-click → Open on first launch to bypass Gatekeeper.
+            > **Linux note:** Make the AppImage executable before running: `chmod +x NetPulse_*.AppImage`
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
