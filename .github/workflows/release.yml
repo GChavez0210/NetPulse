@@ -6,6 +6,10 @@ on:
     tags:
       - 'v*'
 
+# Opt into Node.js 24 for all GitHub Actions runners before the June 2026 forced cutover.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   publish-tauri:
     permissions:
