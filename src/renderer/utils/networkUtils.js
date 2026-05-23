@@ -86,6 +86,45 @@ export function listValue(value) {
 }
 
 export function buildWhoisPresentation(dataWrapper, domain) {
+  const isRdap = dataWrapper?.source === 'RDAP';
+  if (isRdap) {
+    const payload = dataWrapper?.normalized || {};
+    const ip = dataWrapper?.query || domain || 'unknown';
+    const lines = [];
+    const pushKV = (label, value) => {
+      if (value && value !== '') lines.push({ type: 'kv', label, value: String(value) });
+    };
+
+    lines.push({ type: 'comment', value: `# RDAP IP Lookup results for ${ip}` });
+    lines.push({ type: 'comment', value: `# Source: ${payload.rdap_server || 'RDAP'}` });
+    lines.push({ type: 'comment', value: `# Requested at: ${new Date().toISOString().replace('T', ' ').replace('Z', ' UTC')}` });
+    lines.push({ type: 'blank' });
+
+    lines.push({ type: 'section', value: '// Network Information' });
+    lines.push({ type: 'kv', label: 'IP Address', value: ip });
+    pushKV('Network Name', payload.name);
+    pushKV('CIDR Block', payload.cidr);
+    pushKV('Start Address', payload.start_address);
+    pushKV('End Address', payload.end_address);
+    pushKV('Network Type', payload.type);
+    pushKV('Country', payload.country);
+    lines.push({ type: 'blank' });
+
+    lines.push({ type: 'section', value: '// Registration' });
+    pushKV('Owner / Registrant', payload.owner);
+    pushKV('RDAP Server', payload.rdap_server);
+
+    const text = lines
+      .map((line) => {
+        if (line.type === 'kv') return `${line.label.padEnd(25)}: ${line.value}`;
+        if (line.type === 'blank') return '';
+        return line.value;
+      })
+      .join('\n');
+
+    return { lines, text, queryDomain: ip };
+  }
+
   const isRawFallback = dataWrapper?.source && dataWrapper?.source.startsWith('WHOIS (');
   if (isRawFallback && dataWrapper.raw) {
     return {

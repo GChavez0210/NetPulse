@@ -23,6 +23,11 @@ fn is_ipv4(s: &str) -> bool {
     re_parts.iter().all(|p| p.parse::<u8>().is_ok())
 }
 
+/// Returns true if the string is a valid IPv6 address.
+fn is_ipv6(s: &str) -> bool {
+    s.contains(':') && s.parse::<std::net::Ipv6Addr>().is_ok()
+}
+
 /// Perform a raw TCP WHOIS query against host:43.
 async fn raw_tcp_whois(server: &str, query: &str) -> Result<String, String> {
     let addr = format!("{server}:43");
@@ -77,9 +82,44 @@ fn parse_referral(response: &str) -> Option<String> {
     None
 }
 
-/// Handle RDAP lookup for IP addresses.
+/// Map an RIR WHOIS hostname to its RDAP base URL.
+fn whois_to_rdap_base(whois_host: &str) -> Option<&'static str> {
+    match whois_host.trim() {
+        "whois.arin.net"    => Some("https://rdap.arin.net/registry"),
+        "whois.ripe.net"    => Some("https://rdap.ripe.net"),
+        "whois.apnic.net"   => Some("https://rdap.apnic.net"),
+        "whois.lacnic.net"  => Some("https://rdap.lacnic.net"),
+        "whois.afrinic.net" => Some("https://rdap.afrinic.net"),
+        _                   => None,
+    }
+}
+
+/// Handle RDAP lookup for IP addresses, bootstrapping the correct RIR via IANA WHOIS.
 async fn rdap_lookup(ip: &str) -> WhoisResult {
-    let url = format!("https://rdap.org/ip/{ip}");
+    // Step 1: Ask IANA WHOIS which RIR handles this IP.
+    let iana_response = raw_tcp_whois("whois.iana.org", ip)
+        .await
+        .unwrap_or_default();
+    let whois_server = parse_referral(&iana_response)
+        .unwrap_or_else(|| "whois.arin.net".to_string());
+
+    // Step 2: Resolve the RDAP base URL for that RIR.
+    let rdap_base = match whois_to_rdap_base(&whois_server) {
+        Some(base) => base,
+        None => {
+            return WhoisResult {
+                ok: false,
+                query: ip.to_string(),
+                source: format!("RDAP ({whois_server})"),
+                normalized: None,
+                raw: Some(iana_response),
+                error: Some(format!("No RDAP endpoint known for {whois_server}")),
+            };
+        }
+    };
+
+    // Step 3: Query the RIR RDAP server directly.
+    let url = format!("{rdap_base}/ip/{ip}");
     let client = reqwest::Client::new();
 
     let response = match client.get(&url).send().await {
@@ -90,7 +130,7 @@ async fn rdap_lookup(ip: &str) -> WhoisResult {
                 query: ip.to_string(),
                 source: "RDAP".to_string(),
                 normalized: None,
-                raw: None,
+                raw: Some(iana_response),
                 error: Some(format!("RDAP request failed: {e}")),
             };
         }
@@ -104,7 +144,7 @@ async fn rdap_lookup(ip: &str) -> WhoisResult {
                 query: ip.to_string(),
                 source: "RDAP".to_string(),
                 normalized: None,
-                raw: None,
+                raw: Some(iana_response),
                 error: Some(format!("Failed to read RDAP response: {e}")),
             };
         }
@@ -143,22 +183,37 @@ async fn rdap_lookup(ip: &str) -> WhoisResult {
         .unwrap_or("")
         .to_string();
 
-    // cidr from cidr0CidrsV4 or cidr0CidrsV6
+    let start_address = json
+        .get("startAddress")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let end_address = json
+        .get("endAddress")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    // cidr from cidr0_cidrs — check v4prefix first, then v6prefix
     let cidr = json
         .get("cidr0_cidrs")
         .and_then(|v| v.as_array())
         .and_then(|arr| arr.first())
         .and_then(|c| {
-            let v4 = c.get("v4prefix").and_then(|p| p.as_str());
+            let prefix = c
+                .get("v4prefix")
+                .or_else(|| c.get("v6prefix"))
+                .and_then(|p| p.as_str());
             let len = c.get("length").and_then(|l| l.as_u64());
-            match (v4, len) {
+            match (prefix, len) {
                 (Some(p), Some(l)) => Some(format!("{p}/{l}")),
                 _ => None,
             }
         })
         .unwrap_or_default();
 
-    // owner from entities vcard
+    // owner from entities vcard (registrant role)
     let owner = json
         .get("entities")
         .and_then(|e| e.as_array())
@@ -194,6 +249,9 @@ async fn rdap_lookup(ip: &str) -> WhoisResult {
         "type": r#type,
         "cidr": cidr,
         "owner": owner,
+        "start_address": start_address,
+        "end_address": end_address,
+        "rdap_server": rdap_base,
     });
 
     WhoisResult {
@@ -290,7 +348,7 @@ pub async fn whois_lookup(
         Ordering::Relaxed,
     );
 
-    if is_ipv4(&query) {
+    if is_ipv4(&query) || is_ipv6(&query) {
         Ok(rdap_lookup(&query).await)
     } else {
         Ok(raw_whois_lookup(&query).await)

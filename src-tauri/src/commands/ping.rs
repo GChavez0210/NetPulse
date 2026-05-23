@@ -134,7 +134,20 @@ pub async fn ping_sample(
         }
         c.arg(&host);
         c
+    } else if cfg!(target_os = "macos") {
+        // macOS: -W expects milliseconds; DF flag is a standalone -D
+        let mut c = Command::new("ping");
+        c.args(["-c", "1", "-W", "1000"]);
+        if let Some(size) = packet_size {
+            c.args(["-s", &size.to_string()]);
+        }
+        if dont_fragment.unwrap_or(false) {
+            c.arg("-D");
+        }
+        c.arg(&host);
+        c
     } else {
+        // Linux: -W expects seconds; DF flag is -M do
         let mut c = Command::new("ping");
         c.args(["-c", "1", "-W", "1"]);
         if let Some(size) = packet_size {

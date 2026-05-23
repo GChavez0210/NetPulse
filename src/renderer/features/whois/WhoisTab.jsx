@@ -24,12 +24,14 @@ export default function WhoisTab() {
     try {
       const result = await invoke('whois_lookup', { query: domain });
       if (result.ok) {
-        setWhoisData({
+        const dataWrapper = {
           normalized: result.normalized,
           raw: result.raw,
           source: result.source || 'Apilayer',
-          data: result.normalized
-        });
+          data: result.normalized,
+          query: result.query,
+        };
+        setWhoisData(dataWrapper);
         setStatus(`WHOIS lookup complete via ${result.source || 'Apilayer'}.`);
         setWhoisInput('');
       } else {
