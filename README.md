@@ -2,7 +2,7 @@
 
 > Fast, focused network diagnostics — built with Tauri 2, React, and Vite.
 
-NetPulse is a strictly local network diagnostics suite that interfaces directly with your operating system's native networking stack — ICMP binaries, raw TCP sockets, and DNS resolvers — to deliver precise, dependency-free telemetry in a modern dark-glass desktop interface.
+NetPulse is a network diagnostics suite that interfaces directly with your operating system's native networking stack — ICMP binaries, raw TCP sockets, and DNS resolvers — to deliver precise, dependency-free telemetry in a modern dark-glass desktop interface.
 
 **Current version:** v0.5.1 · **Platform:** Windows, Linux & macOS (pre-built installers)
 
