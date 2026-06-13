@@ -4,7 +4,7 @@
 
 NetPulse is a strictly local network diagnostics suite that interfaces directly with your operating system's native networking stack — ICMP binaries, raw TCP sockets, and DNS resolvers — to deliver precise, dependency-free telemetry in a modern dark-glass desktop interface.
 
-**Current version:** v0.5.1 · **Platform:** Windows (primary), Linux & macOS (source build)
+**Current version:** v0.5.1 · **Platform:** Windows, Linux & macOS (pre-built installers)
 
 ---
 
@@ -89,8 +89,20 @@ Passive reconnaissance tools for domains, hosts, and web targets.
 | **Disk** | ~30 MB for the installed app |
 | **Network** | Standard TCP/IP stack; ICMP not blocked by firewall for ping/traceroute features |
 
-### Linux & macOS (source build)
-See [Building from Source](#building-from-source) for all prerequisites.
+### Linux (pre-built installer)
+| | Minimum |
+|---|---|
+| **OS** | A modern x64 distribution with `glibc` (Ubuntu 22.04+ or equivalent) |
+| **Runtime** | `libwebkit2gtk-4.1`; the `traceroute` package for the Network Topology feature |
+| **Packages** | `.AppImage` (portable), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) |
+
+### macOS (pre-built installer)
+| | Minimum |
+|---|---|
+| **OS** | macOS 11 Big Sur or later, **Apple Silicon** (M1/M2/M3+) |
+| **Intel Macs** | No pre-built installer — [build from source](#building-from-source) |
+
+> **macOS note:** Builds are unsigned. On first launch, right-click the app → **Open** to bypass Gatekeeper.
 
 ---
 
@@ -105,17 +117,35 @@ See [Building from Source](#building-from-source) for all prerequisites.
 
 > **Note on firewall/ICMP:** Ping, flood test, and traceroute features require ICMP to not be blocked by your Windows Firewall or network policy. If those features return no results, check that inbound/outbound ICMP Echo is allowed.
 
+### Linux — Pre-built Installer
+
+1. Go to the [Releases](https://github.com/GChavez0210/NetPulse/releases) page.
+2. Download the package for your distribution:
+   - `NetPulse_0.5.1_amd64.AppImage` — portable; run `chmod +x NetPulse_*.AppImage` then launch it.
+   - `NetPulse_0.5.1_amd64.deb` — Debian/Ubuntu: `sudo apt install ./NetPulse_0.5.1_amd64.deb`
+   - `NetPulse-0.5.1-1.x86_64.rpm` — Fedora/RHEL: `sudo dnf install ./NetPulse-0.5.1-1.x86_64.rpm`
+3. Install the `traceroute` package (`sudo apt install traceroute`) for the Network Topology feature.
+
+### macOS — Pre-built Installer (Apple Silicon)
+
+1. Go to the [Releases](https://github.com/GChavez0210/NetPulse/releases) page.
+2. Download `NetPulse_0.5.1_aarch64.dmg`, open it, and drag **NetPulse** to Applications.
+3. On first launch, right-click the app → **Open** to bypass Gatekeeper (builds are unsigned).
+
+> Intel Macs are not covered by a pre-built installer — see [Building from Source](#building-from-source).
+
 ---
 
 ## Cross-Platform Support
 
 | Platform | Status | Notes |
 |---|---|---|
-| **Windows 10/11** | ✅ Full support | Primary development target; pre-built installer provided |
-| **Linux** | 🟡 Source build | Requires `traceroute` package installed (`sudo apt install traceroute` on Debian/Ubuntu). All features functional. |
-| **macOS** | 🟡 Source build | The "Don't Fragment" flag in Multi-Target Ping uses Linux's `-M do` syntax and will not apply on macOS (the flag is silently ignored). All other features functional. |
+| **Windows 10/11** (x64) | ✅ Pre-built installer | Primary development target. `.exe` (NSIS) and `.msi`. |
+| **Linux** (x64) | ✅ Pre-built installer | `.AppImage`, `.deb`, `.rpm`. Requires `traceroute` for the Network Topology feature. All features functional. |
+| **macOS** (Apple Silicon) | ✅ Pre-built installer | `.dmg`. The "Don't Fragment" flag in Multi-Target Ping uses Linux's `-M do` syntax and is silently ignored on macOS; all other features functional. |
+| **macOS** (Intel) | 🟡 Source build | No pre-built installer; build from source. |
 
-NetPulse is built on **Tauri 2**, which is fully cross-platform. The Rust backend uses `cfg!(target_os = "windows")` branches to switch between Windows and Unix semantics for ping, traceroute, and process flags — so the app compiles and runs correctly on all three platforms. Pre-built packages for Linux (`.AppImage`, `.deb`) and macOS (`.dmg`) are planned for a future release.
+NetPulse is built on **Tauri 2**, which is fully cross-platform. The Rust backend uses `cfg!(target_os = "windows")` branches to switch between Windows and Unix semantics for ping, traceroute, and process flags — so the app compiles and runs correctly on all three platforms.
 
 ---
 
