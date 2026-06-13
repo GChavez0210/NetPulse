@@ -5,6 +5,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and thi
 
 ---
 
+## [0.5.1] — 2026-06-13
+
+Release-pipeline maintenance only — no changes to application behavior.
+
+### Changed
+- **CI:** Dropped the macOS Intel (`x86_64`) build target. The `macos-13` job hung for 24 hours on the v0.5.0 run and was force-cancelled, which is why v0.5.0 shipped without a macOS Intel installer. macOS builds now target Apple Silicon (`aarch64`) only.
+- **CI:** Added a 30-minute `timeout-minutes` to the release job so a hung build fails fast instead of stalling the whole release for 24 hours.
+- **CI:** Opted into the Node.js 24 Actions runner ahead of the June 2026 forced cutover (carried over from v0.5.0).
+
+---
+
 ## [0.5.0] — 2026-05-22 🎉 First Release
 
 ### Added

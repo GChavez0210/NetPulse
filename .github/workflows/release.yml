@@ -34,12 +34,12 @@ jobs:
             rust-target: aarch64-apple-darwin
             args: '--target aarch64-apple-darwin'
 
-          # ── macOS Intel ───────────────────────────────────────────────────
-          - platform: macos-13
-            rust-target: x86_64-apple-darwin
-            args: '--target x86_64-apple-darwin'
-
     runs-on: ${{ matrix.platform }}
+
+    # Safety net: a single build should finish in well under 30 min. Without
+    # this, a hung step (e.g. an interactive prompt) burns GitHub's 24h max
+    # and stalls the whole release — which is exactly what happened on v0.5.0.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -95,7 +95,6 @@ jobs:
             | **Windows 10/11** (x64) | `NetPulse_*_x64-setup.exe` |
             | **Linux** (x64) | `NetPulse_*_amd64.AppImage` &nbsp;·&nbsp; `NetPulse_*_amd64.deb` |
             | **macOS** (Apple Silicon) | `NetPulse_*_aarch64.dmg` |
-            | **macOS** (Intel) | `NetPulse_*_x64.dmg` |
 
             > **macOS note:** Builds are unsigned. Right-click → Open on first launch to bypass Gatekeeper.
             > **Linux note:** Make the AppImage executable before running: `chmod +x NetPulse_*.AppImage`

@@ -4,7 +4,7 @@
 
 NetPulse is a strictly local network diagnostics suite that interfaces directly with your operating system's native networking stack — ICMP binaries, raw TCP sockets, and DNS resolvers — to deliver precise, dependency-free telemetry in a modern dark-glass desktop interface.
 
-**Current version:** v0.5.0 · **Platform:** Windows (primary), Linux & macOS (source build)
+**Current version:** v0.5.1 · **Platform:** Windows (primary), Linux & macOS (source build)
 
 ---
 
@@ -99,7 +99,7 @@ See [Building from Source](#building-from-source) for all prerequisites.
 ### Windows — Pre-built Installer (Recommended)
 
 1. Go to the [Releases](https://github.com/GChavez0210/NetPulse/releases) page.
-2. Download `NetPulse_0.5.0_x64-setup.exe` from the latest release.
+2. Download `NetPulse_0.5.1_x64-setup.exe` from the latest release.
 3. Run the installer — it will install NetPulse and (on Windows 10) automatically install the Microsoft WebView2 runtime if missing.
 4. Launch **NetPulse** from the Start Menu or Desktop shortcut.
 
