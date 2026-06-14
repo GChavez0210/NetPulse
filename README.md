@@ -1,202 +1,153 @@
 # NetPulse
 
-> Fast, focused network diagnostics — built with Tauri 2, React, and Vite.
+<p align="center">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License">
+  </a>
+  <a href="https://github.com/GChavez0210/NetPulse/releases">
+    <img src="https://img.shields.io/github/v/release/GChavez0210/NetPulse" alt="Latest Release">
+  </a>
+  <a href="https://github.com/GChavez0210/NetPulse/releases">
+    <img src="https://img.shields.io/github/downloads/GChavez0210/NetPulse/total" alt="Downloads">
+  </a>
+  <a href="https://github.com/GChavez0210/NetPulse/stargazers">
+    <img src="https://img.shields.io/github/stars/GChavez0210/NetPulse" alt="Stars">
+  </a>
+  <a href="https://github.com/GChavez0210/NetPulse/issues">
+    <img src="https://img.shields.io/github/issues/GChavez0210/NetPulse" alt="Issues">
+  </a>
+  <a href="https://buymeacoffee.com/gchavez0210">
+    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=000000" alt="Buy Me A Coffee">
+  </a>
+</p>
 
-NetPulse is a network diagnostics suite that interfaces directly with your operating system's native networking stack — ICMP binaries, raw TCP sockets, and DNS resolvers — to deliver precise, dependency-free telemetry in a modern dark-glass desktop interface.
+<p align="center">
+  <strong>Cross-platform network diagnostics for engineers, administrators, and enthusiasts.</strong>
+</p>
 
-**Current version:** v0.5.1 · **Platform:** Windows, Linux & macOS (pre-built installers)
+<p align="center">
+  Ping • Traceroute • DNS • TCP • TLS • WHOIS • Recon
+</p>
 
 ---
 
-## Table of Contents
+NetPulse is a desktop network diagnostics toolkit built with Tauri, React, and Rust.
 
-- [Features](#features)
-- [System Requirements](#system-requirements)
-- [Installation](#installation)
-- [Cross-Platform Support](#cross-platform-support)
-- [Building from Source](#building-from-source)
-- [Architecture](#architecture)
-- [Built with AI](#built-with-ai)
-- [License](#license)
+It combines the tools network engineers use every day—ping, traceroute, DNS analysis, TCP diagnostics, TLS inspection, WHOIS/RDAP lookups, and passive reconnaissance—into a single cross-platform desktop application while leveraging the operating system's native networking stack for accurate results.
+
+Designed to be lightweight, fast, and dependency-free, NetPulse delivers professional-grade diagnostics without requiring command-line expertise.
+
+## Download
+
+Download the latest release from:
+
+https://github.com/GChavez0210/NetPulse/releases
+
+### Supported Platforms
+
+| Platform | Status |
+|-----------|---------|
+| Windows 10/11 (x64) | ✅ |
+| Linux (x64) | ✅ |
+| macOS Apple Silicon | ✅ |
+| macOS Intel | 🟡 Source Build |
+
+---
+
+## Screenshots
+
+![Screenshot 1](SCREENSHOTS/NP1.png)
+
+![Screenshot 2](SCREENSHOTS/NP2.png)
+
+![Screenshot 3](SCREENSHOTS/NP3.png)
+
+![Screenshot 4](SCREENSHOTS/NP4.png)
 
 ---
 
 ## Features
 
-### 🖥 Multi-Target Ping
-Monitor multiple hosts simultaneously via continuous ICMP sampling with live latency graphs.
-- Configurable packet size and DF (Don't Fragment) flag per session
-- Per-session custom ping interval: 0.5 s, 1 s, 2 s, 5 s, 10 s
-- Host aliases — set a friendly display name per monitor (double-click or pencil icon)
-- Drag-and-drop card reordering
-- Saved host groups (Favorites) — save the current set of targets as a named group and reload with one click; persisted across sessions
-- Audio alerts — synthesized tone on host up/down transitions; toggle on/off
-- Single and bulk IP entry modes; CSV session export (includes alias column)
-- Global KPIs: active monitors, average RTT, average packet loss across all sessions
-- Per-session health pills (Stable / Jitter / Timeout) with automatic state tracking
-- In-app notifications on host up/down state transitions
+### Multi-Target Ping
 
-### 💥 Flood Test
-Execute high-frequency ICMP pacing tests to isolate unstable links.
-- 100 or 1000 packet bursts
-- Real-time per-packet sequence grid (success / jitter / failed / pending cells)
-- Streaming diagnostic log and summary metrics: avg / min / max / p95 RTT, jitter, max consecutive loss streak
-- In-app notification on test completion with full summary
+Monitor multiple hosts simultaneously with live latency tracking, packet loss analysis, configurable intervals, custom aliases, host groups, notifications, and audio alerts.
 
-### 🗺 Network Topology (Traceroute)
-Visual hop-by-hop traceroute with automatic GeoIP enrichment.
-- Latency status bars per hop (good / warn / bad)
-- Background GeoIP enrichment — country, city, org, and ASN fetched after the trace completes
-- CSV export of full hop analysis including geographic and ASN data
+### Flood Test
 
-### 📊 Advanced Diagnostics (8 tools)
-- **TCP Ping** — SYN reachability test with RTT on any port; configurable target port (default 443)
-- **MTR-style** — multi-round traceroute aggregation with configurable round count; per-hop loss %, avg / best / worst RTT, and worst-hop identification
-- **DNS Toolkit** — query A, AAAA, MX, NS, CNAME, or PTR records against both the system resolver and Google (8.8.8.8) simultaneously; results shown side-by-side
-- **Port Scanner Lite** — concurrent TCP connect scan across up to 32 ports at once; comma-separated port list input; 900 ms per-port timeout
-- **DNS Validation** — checks for presence of A, AAAA, NS, SOA, and CAA records and produces a health score from 0–100 with per-check pass/fail detail
-- **Multi-Resolver Health** — compares A, AAAA, and NS records across System, Cloudflare (1.1.1.1), and Google (8.8.8.8) resolvers to surface split-horizon configurations or DNS poisoning
-- **DMARC Inspector** — fetches the `_dmarc.<domain>` TXT record, parses all policy tags (`v`, `p`, `rua`, `ruf`, `pct`, etc.), and flags missing or misconfigured values
-- **WHOIS / RDAP** — API-key-free. IPv4/IPv6 addresses use the RDAP protocol with IANA bootstrapping to the correct RIR (ARIN, RIPE, APNIC, LACNIC, AFRINIC); domains follow the IANA referral chain via raw Port 43 TCP sockets to the authoritative registrar WHOIS server; results include copy and TXT export
+High-frequency ICMP testing with real-time packet visualization, jitter analysis, packet loss tracking, and diagnostic summaries.
 
-### 🔍 Recon Toolkit (4 tools)
-Passive reconnaissance tools for domains, hosts, and web targets.
-- **SSL/TLS Inspector** — full certificate chain analysis: TLS version (1.2/1.3), subject, issuer, serial number, Subject Alternative Names, chain depth, expiry countdown in days, and expired/valid status pill; configurable port (default 443)
-- **HTTP Headers** — sends a HEAD request (falls back to GET on 405) and displays the final URL after all redirects, HTTP status code, and the complete set of response headers
-- **Tech Detect** — fingerprints a URL via response headers and HTML body patterns; identifies CMSs (WordPress, Drupal, Joomla, Ghost), e-commerce platforms (Shopify, WooCommerce, PrestaShop), JS frameworks (React, Vue, Angular, Next.js, Nuxt, Svelte), CSS frameworks (Bootstrap, Tailwind), CDNs (Cloudflare, Varnish), cloud providers (AWS, Azure), analytics tools (Google Analytics, GTM, Matomo), and more
-- **MAC Address OUI Matcher** — identifies the hardware vendor from a MAC address using a bundled SQLite OUI database (~5.8 MB); sub-millisecond lookups with no internet access required; accepts colon, hyphen, or dot-separated MAC formats
+### Network Topology
 
-### 🔔 In-App Notifications
-- Persistent notification panel accessible from the top nav
-- Captures ping up/down transitions, flood test completions, and traceroute completions
-- Up to 100 entries retained per session; one-click clear all
+Traceroute visualization with automatic GeoIP enrichment including ASN, organization, city, and country information.
 
-### ⚙️ Settings & Window Utilities
-- Persistent JSON settings file in the Tauri app data directory — survives app restarts
-- Stores: ping favorites, audio alert preference, always-on-top state
-- **Always-on-top** — pin the window above all other applications via the pushpin button in the top-right nav; state persists across restarts
+### Advanced Diagnostics
+
+Includes:
+
+- TCP Ping
+- MTR-style traceroute analysis
+- DNS Toolkit
+- Port Scanner Lite
+- DNS Validation
+- Multi-Resolver Health Checks
+- DMARC Inspector
+- WHOIS / RDAP
+
+### Recon Toolkit
+
+Includes:
+
+- SSL/TLS Inspector
+- HTTP Header Analysis
+- Technology Detection
+- MAC Address Vendor Lookup
+
+### Notifications & Monitoring
+
+Persistent notification center, monitor state tracking, alerting, historical session metrics, and operational visibility features.
+
+---
+
+## Why NetPulse?
+
+Most network troubleshooting still requires jumping between multiple command-line tools, browser tabs, and third-party websites.
+
+NetPulse brings common operational diagnostics into a single desktop application while remaining lightweight, fast, and fully local.
+
+No subscriptions.
+
+No cloud dependency.
+
+No API keys required.
+
+No telemetry.
 
 ---
 
 ## System Requirements
 
-### Windows (pre-built installer)
-| | Minimum |
-|---|---|
-| **OS** | Windows 10 version 1803 or later (64-bit) |
-| **WebView2** | Included with Windows 11; auto-installed by the NSIS setup on Windows 10 |
-| **RAM** | 150 MB available |
-| **Disk** | ~30 MB for the installed app |
-| **Network** | Standard TCP/IP stack; ICMP not blocked by firewall for ping/traceroute features |
+### Windows
 
-### Linux (pre-built installer)
-| | Minimum |
-|---|---|
-| **OS** | A modern x64 distribution with `glibc` (Ubuntu 22.04+ or equivalent) |
-| **Runtime** | `libwebkit2gtk-4.1`; the `traceroute` package for the Network Topology feature |
-| **Packages** | `.AppImage` (portable), `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL) |
+- Windows 10 1803 or later
+- Microsoft WebView2 Runtime
+- 150 MB RAM available
+- ~30 MB disk space
 
-### macOS (pre-built installer)
-| | Minimum |
-|---|---|
-| **OS** | macOS 11 Big Sur or later, **Apple Silicon** (M1/M2/M3+) |
-| **Intel Macs** | No pre-built installer — [build from source](#building-from-source) |
+### Linux
 
-> **macOS note:** Builds are unsigned. On first launch, right-click the app → **Open** to bypass Gatekeeper.
+- Modern x64 distribution
+- WebKitGTK 4.1
+- traceroute package
+
+### macOS
+
+- macOS 11 Big Sur or later
+- Apple Silicon supported
+- Intel Macs supported via source build
 
 ---
 
-## Installation
-
-### Windows — Pre-built Installer (Recommended)
-
-1. Go to the [Releases](https://github.com/GChavez0210/NetPulse/releases) page.
-2. Download `NetPulse_0.5.1_x64-setup.exe` from the latest release.
-3. Run the installer — it will install NetPulse and (on Windows 10) automatically install the Microsoft WebView2 runtime if missing.
-4. Launch **NetPulse** from the Start Menu or Desktop shortcut.
-
-> **Note on firewall/ICMP:** Ping, flood test, and traceroute features require ICMP to not be blocked by your Windows Firewall or network policy. If those features return no results, check that inbound/outbound ICMP Echo is allowed.
-
-### Linux — Pre-built Installer
-
-1. Go to the [Releases](https://github.com/GChavez0210/NetPulse/releases) page.
-2. Download the package for your distribution:
-   - `NetPulse_0.5.1_amd64.AppImage` — portable; run `chmod +x NetPulse_*.AppImage` then launch it.
-   - `NetPulse_0.5.1_amd64.deb` — Debian/Ubuntu: `sudo apt install ./NetPulse_0.5.1_amd64.deb`
-   - `NetPulse-0.5.1-1.x86_64.rpm` — Fedora/RHEL: `sudo dnf install ./NetPulse-0.5.1-1.x86_64.rpm`
-3. Install the `traceroute` package (`sudo apt install traceroute`) for the Network Topology feature.
-
-### macOS — Pre-built Installer (Apple Silicon)
-
-1. Go to the [Releases](https://github.com/GChavez0210/NetPulse/releases) page.
-2. Download `NetPulse_0.5.1_aarch64.dmg`, open it, and drag **NetPulse** to Applications.
-3. On first launch, right-click the app → **Open** to bypass Gatekeeper (builds are unsigned).
-
-> Intel Macs are not covered by a pre-built installer — see [Building from Source](#building-from-source).
-
----
-
-## Cross-Platform Support
-
-| Platform | Status | Notes |
-|---|---|---|
-| **Windows 10/11** (x64) | ✅ Pre-built installer | Primary development target. `.exe` (NSIS) and `.msi`. |
-| **Linux** (x64) | ✅ Pre-built installer | `.AppImage`, `.deb`, `.rpm`. Requires `traceroute` for the Network Topology feature. All features functional. |
-| **macOS** (Apple Silicon) | ✅ Pre-built installer | `.dmg`. The "Don't Fragment" flag in Multi-Target Ping uses Linux's `-M do` syntax and is silently ignored on macOS; all other features functional. |
-| **macOS** (Intel) | 🟡 Source build | No pre-built installer; build from source. |
-
-NetPulse is built on **Tauri 2**, which is fully cross-platform. The Rust backend uses `cfg!(target_os = "windows")` branches to switch between Windows and Unix semantics for ping, traceroute, and process flags — so the app compiles and runs correctly on all three platforms.
-
----
-
-## Building from Source
-
-### Prerequisites
-
-| Tool | Version | Notes |
-|---|---|---|
-| **Node.js** | 18+ | [nodejs.org](https://nodejs.org/) — LTS recommended |
-| **Rust & Cargo** | Stable | Via [rustup.rs](https://rustup.rs/) |
-| **Tauri CLI** | Included | Installed via `npm install` |
-
-**Installing Rust:**
-
-```bash
-# Windows (via winget)
-winget install Rustlang.Rustup
-
-# macOS / Linux
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
-
-After installing, open a new terminal and run:
-```bash
-rustup default stable
-```
-
-**Linux — additional system packages:**
-
-```bash
-# Ubuntu / Debian
-sudo apt update && sudo apt install -y \
-  libwebkit2gtk-4.1-dev \
-  libgtk-3-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev \
-  traceroute
-
-# Fedora / RHEL
-sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel traceroute
-```
-
-**macOS — no extra packages needed** beyond Xcode Command Line Tools:
-```bash
-xcode-select --install
-```
-
----
-
-### Development
+## Building From Source
 
 ```bash
 git clone https://github.com/GChavez0210/NetPulse.git
@@ -205,71 +156,44 @@ npm install
 npm run dev
 ```
 
-`npm run dev` runs `tauri dev`, which starts the Vite dev server and compiles the Rust backend concurrently. The **first run takes several minutes** while Cargo fetches and compiles all dependencies — subsequent runs are fast.
-
----
-
-### Production Build
+Production build:
 
 ```bash
 npm run build
 ```
 
-Output is placed in `src-tauri/target/release/bundle/`:
+Requires:
 
-| Platform | Output |
-|---|---|
-| Windows | `nsis/NetPulse_x.x.x_x64-setup.exe` (NSIS installer) |
-| macOS | `macos/NetPulse.app` + `.dmg` |
-| Linux | `appimage/NetPulse_x.x.x_amd64.AppImage` + `.deb` |
-
-> **Bundled resource:** `assets/oui-database.sqlite` is declared as a Tauri resource and is automatically bundled with the installer. It is opened read-only at startup — no separate setup needed.
+- Node.js 18+
+- Rust (stable)
+- Tauri 2
 
 ---
 
-## Architecture
+## Support NetPulse
 
-NetPulse is built on **Tauri 2** — a Rust + WebView desktop framework. The Rust backend handles all privileged operations; the React frontend communicates with it exclusively via Tauri's typed `invoke()` / `listen()` IPC.
+NetPulse is an independent open-source project developed and maintained during personal time.
 
-### Backend (Rust — `src-tauri/src/commands/`)
+If NetPulse helps with your day-to-day troubleshooting, network operations, or learning journey, consider supporting continued development.
 
-| Module | Responsibility |
-|---|---|
-| `ping.rs` | Spawns the OS `ping` binary; parses RTT from Windows and Unix output formats |
-| `flood.rs` | Async flood loop in a `tokio::spawn` task; emits per-packet events to the frontend |
-| `trace.rs` | Spawns `tracert` (Windows) / `traceroute` (Unix); returns raw output for frontend parsing |
-| `tcp.rs` | `tokio::net::TcpStream` connect with timeout; concurrent port scanning via `futures::join_all` |
-| `dns.rs` | `hickory-resolver` with system, Cloudflare, and Google resolvers; DNS validation scoring; DMARC parsing; MTR aggregation |
-| `whois.rs` | `reqwest` RDAP for IPs (IANA bootstrapped); async TCP WHOIS with referral chain for domains |
-| `recon.rs` | `rustls` sync TLS inspection; HTTP header fetch; crt.sh subdomain enumeration; technology fingerprinting |
-| `oui.rs` | `rusqlite` read-only query on bundled OUI database via `spawn_blocking` |
-| `geoip.rs` | `reqwest` lookup via `ip-api.com`; skips private/loopback addresses |
-| `settings.rs` | JSON settings file read/write in the Tauri app data directory |
-
-**Key crates:** `tauri 2`, `tokio` (full), `reqwest` (rustls-tls), `rusqlite` (bundled), `hickory-resolver`, `rustls`, `x509-parser`, `serde`, `futures`
-
-### Frontend (React — `src/renderer/`)
-
-- **Routing:** single `useState` tab switch in `App.jsx` — no router dependency. All tabs stay mounted to preserve state; inactive tabs are hidden via CSS.
-- **Charts:** Recharts `LineChart` for live latency, CSS conic-gradient donut for flood loss rate.
-- **Styling:** Tailwind CSS v4 (Vite plugin) + CSS custom properties design system. JetBrains Mono for all data readout, Inter for labels.
-- **IPC:** `@tauri-apps/api/core` `invoke()` for request/response commands; `@tauri-apps/api/event` `listen()` for flood test push events.
-- **Notifications:** in-app panel component in `App.jsx`; `addNotification` callback passed down to feature tabs.
+<p align="center">
+  <a href="https://buymeacoffee.com/gchavez0210">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="220">
+  </a>
+</p>
 
 ---
 
 ## Built with AI
 
-This application was built using an AI-assisted development workflow powered by **[Antigravity](https://antigravity.google/)**, **[Claude Code](https://claude.ai)** and **[Codex](https://chatgpt.com/codex)**. AI accelerated the creation of the codebase, enabling faster iteration cycles and a consistent architecture across the project.
+NetPulse was developed using an AI-assisted workflow leveraging Antigravity, Claude Code, and OpenAI Codex.
 
-All system design, validation, and testing remain under developer control.
+Architecture, implementation decisions, validation, testing, and release management remain under direct developer control.
 
 ---
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE) for details.
+MIT License.
 
----
-
-*NetPulse by Gabriel Chavez · Developed in Mexico 🇲🇽*
+See [LICENSE](LICENSE) for details.
