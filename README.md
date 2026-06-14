@@ -5,18 +5,14 @@
     <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License">
   </a>
   <a href="https://github.com/GChavez0210/NetPulse/releases">
-    <img src="https://img.shields.io/github/downloads/GChavez0210/NetPulse/total" alt="Downloads">
-  </a>
-  <a href="https://github.com/GChavez0210/NetPulse/stargazers">
-    <img src="https://img.shields.io/github/stars/GChavez0210/NetPulse" alt="Stars">
-  </a>
-  <a href="https://github.com/GChavez0210/NetPulse/issues">
-    <img src="https://img.shields.io/github/issues/GChavez0210/NetPulse" alt="Issues">
+    <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue" alt="Platforms">
   </a>
   <a href="https://buymeacoffee.com/gchavez0210">
     <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=000000" alt="Buy Me A Coffee">
   </a>
 </p>
+
+<p align="center">
 
 <p align="center">
   <strong>Cross-platform network diagnostics for engineers, administrators, and enthusiasts.</strong>
