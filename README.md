@@ -5,9 +5,6 @@
     <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License">
   </a>
   <a href="https://github.com/GChavez0210/NetPulse/releases">
-    <img src="https://img.shields.io/github/v/release/GChavez0210/NetPulse" alt="Latest Release">
-  </a>
-  <a href="https://github.com/GChavez0210/NetPulse/releases">
     <img src="https://img.shields.io/github/downloads/GChavez0210/NetPulse/total" alt="Downloads">
   </a>
   <a href="https://github.com/GChavez0210/NetPulse/stargazers">
