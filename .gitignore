@@ -10,3 +10,4 @@ src-tauri/gen/
 
 # Claude Code local settings (personal allowlists, local paths)
 .claude/
+.codex/config.toml
