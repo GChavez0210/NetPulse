@@ -154,6 +154,7 @@ export default function TraceTab({ addNotification }) {
     setTraceLoading(true);
     setTraceHops([]);
     setGeoData({});
+    setGeoLoading(false);
     setTraceOutput('Initializing trace route...');
     setStatus(`Running traceroute to ${host}...`);
     setTraceSummary({ totalHops: 0, avgRtt: null });

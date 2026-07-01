@@ -143,7 +143,7 @@ export default function ReconTab() {
       setStatus(res.ok ? 'DMARC validation complete.' : 'DMARC validation failed.');
       if (res.ok) setDmarcInput('');
     } catch (e) {
-      setDmarcResult({ ok: false, error: e.message });
+      setDmarcResult({ ok: false, error: String(e?.message || e) });
       setStatus('DMARC validation error.');
     } finally {
       setDmarcLoading(false);

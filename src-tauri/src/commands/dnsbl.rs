@@ -83,13 +83,20 @@ async fn query_zone(resolver: &TokioResolver, reversed: &str, zone: &DnsblZone) 
                 }
             }
         }
-        // NXDOMAIN and other lookup failures both mean "not listed" for DNSBL semantics.
-        Err(_) => DnsblListing {
+        // NXDOMAIN (no records found) genuinely means "not listed" in DNSBL
+        // semantics. Any other failure (timeout, SERVFAIL, network error) is
+        // a transient resolver problem, not a real answer — mark inconclusive
+        // rather than silently reporting a false "not listed".
+        Err(e) => DnsblListing {
             zone: zone.zone.to_string(),
             name: zone.name.to_string(),
             listed: false,
-            response: None,
-            inconclusive: false,
+            response: if e.is_no_records_found() {
+                None
+            } else {
+                Some(format!("Lookup failed: {e}"))
+            },
+            inconclusive: !e.is_no_records_found(),
         },
     }
 }
