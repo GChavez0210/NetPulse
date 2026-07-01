@@ -1,6 +1,8 @@
 use hickory_resolver::{
-    config::{NameServerConfig, Protocol, ResolverConfig, ResolverOpts},
-    TokioAsyncResolver,
+    config::{NameServerConfig, ResolverConfig},
+    net::runtime::TokioRuntimeProvider,
+    proto::rr::{domain::Name, RecordType},
+    TokioResolver,
 };
 use serde::Serialize;
 
@@ -11,6 +13,11 @@ pub struct DnsResult {
     pub record_type: String,
     pub local: Vec<String>,
     pub google: Vec<String>,
+    /// Set when the *local* resolver genuinely failed (timeout/network/SERVFAIL),
+    /// as opposed to `local` simply being empty because no records exist.
+    pub local_error: Option<String>,
+    /// Same distinction for the Google (8.8.8.8) resolver.
+    pub google_error: Option<String>,
     pub error: Option<String>,
 }
 
@@ -90,101 +97,101 @@ pub struct MtrHop {
 // Resolver helpers
 // ---------------------------------------------------------------------------
 
-fn make_custom_resolver(ip: &str) -> Result<TokioAsyncResolver, String> {
-    let socket_addr = format!("{ip}:53")
-        .parse()
-        .map_err(|_| format!("Invalid DNS server address: {ip}"))?;
-    let mut config = ResolverConfig::new();
-    config.add_name_server(NameServerConfig {
-        socket_addr,
-        protocol: Protocol::Udp,
-        tls_dns_name: None,
-        trust_negative_responses: false,
-        bind_addr: None,
-    });
-    Ok(TokioAsyncResolver::tokio(config, ResolverOpts::default()))
+fn make_custom_resolver(ip: &str) -> Result<TokioResolver, String> {
+    let addr: std::net::IpAddr = ip.parse().map_err(|_| format!("Invalid DNS server address: {ip}"))?;
+    let config = ResolverConfig::from_parts(None, vec![], vec![NameServerConfig::udp(addr)]);
+    TokioResolver::builder_with_config(config, TokioRuntimeProvider::default())
+        .build()
+        .map_err(|e| e.to_string())
 }
 
-fn make_system_resolver() -> Result<TokioAsyncResolver, String> {
-    TokioAsyncResolver::tokio_from_system_conf().map_err(|e| e.to_string())
+fn make_system_resolver() -> Result<TokioResolver, String> {
+    let builder = TokioResolver::builder_tokio().map_err(|e| e.to_string())?;
+    builder.build().map_err(|e| e.to_string())
 }
 
-/// Resolve a record type with a given resolver, returning strings.
+/// Shared set of resolvers, built once and reused across all DNS-related
+/// commands instead of re-resolving system config / rebuilding a UDP
+/// resolver (and discarding its lookup cache) on every invocation.
+pub struct DnsResolvers {
+    pub system: TokioResolver,
+    pub google: TokioResolver,
+    pub cloudflare: TokioResolver,
+}
+
+pub async fn get_resolvers<'a>(
+    state: &'a tauri::State<'_, crate::AppState>,
+) -> Result<&'a DnsResolvers, String> {
+    state
+        .dns_resolvers
+        .get_or_try_init(|| async {
+            Ok::<DnsResolvers, String>(DnsResolvers {
+                system: make_system_resolver()?,
+                google: make_custom_resolver("8.8.8.8")?,
+                cloudflare: make_custom_resolver("1.1.1.1")?,
+            })
+        })
+        .await
+}
+
+/// Resolve a record type with a given resolver.
+///
+/// Returns `Ok(vec![])` when the domain genuinely has no records of this
+/// type (NXDOMAIN / NoRecordsFound — a legitimate, successful DNS answer),
+/// and `Err(...)` only for real failures (timeout, network error, SERVFAIL,
+/// refused, etc.) so callers can tell "no records" apart from "lookup failed".
 async fn resolve_record(
-    resolver: &TokioAsyncResolver,
+    resolver: &TokioResolver,
     domain: &str,
     record_type: &str,
-) -> Vec<String> {
-    match record_type.to_uppercase().as_str() {
-        "A" => resolver
-            .lookup_ip(domain)
-            .await
-            .map(|r| {
-                r.iter()
-                    .filter(|ip| ip.is_ipv4())
-                    .map(|ip| ip.to_string())
-                    .collect()
-            })
-            .unwrap_or_default(),
-        "AAAA" => resolver
-            .lookup_ip(domain)
-            .await
-            .map(|r| {
-                r.iter()
-                    .filter(|ip| ip.is_ipv6())
-                    .map(|ip| ip.to_string())
-                    .collect()
-            })
-            .unwrap_or_default(),
-        "MX" => resolver
-            .mx_lookup(domain)
-            .await
-            .map(|r| r.iter().map(|mx| format!("{} {}", mx.preference(), mx.exchange())).collect())
-            .unwrap_or_default(),
-        "NS" => resolver
-            .ns_lookup(domain)
-            .await
-            .map(|r| r.iter().map(|ns| ns.to_string()).collect())
-            .unwrap_or_default(),
-        "CNAME" => resolver
-            .lookup(domain, hickory_resolver::proto::rr::RecordType::CNAME)
-            .await
-            .map(|r| r.iter().map(|rdata| rdata.to_string()).collect())
-            .unwrap_or_default(),
-        "PTR" => match domain.parse() {
-            Ok(ip) => resolver
-                .reverse_lookup(ip)
-                .await
-                .map(|r| r.iter().map(|ptr| ptr.to_string()).collect())
-                .unwrap_or_default(),
-            Err(_) => vec![format!("Invalid IP address for PTR lookup: {domain}")],
-        },
-        "SOA" => resolver
-            .lookup(domain, hickory_resolver::proto::rr::RecordType::SOA)
-            .await
-            .map(|r| r.iter().map(|rdata| rdata.to_string()).collect())
-            .unwrap_or_default(),
-        "TXT" => resolver
-            .txt_lookup(domain)
-            .await
-            .map(|r| {
-                r.iter()
-                    .map(|txt| {
-                        txt.iter()
-                            .map(|bytes| String::from_utf8_lossy(bytes).to_string())
-                            .collect::<Vec<_>>()
-                            .join("")
-                    })
-                    .collect()
-            })
-            .unwrap_or_default(),
-        "CAA" => resolver
-            .lookup(domain, hickory_resolver::proto::rr::RecordType::CAA)
-            .await
-            .map(|r| r.iter().map(|rdata| rdata.to_string()).collect())
-            .unwrap_or_default(),
-        _ => vec![],
+) -> Result<Vec<String>, String> {
+    fn ok_or_no_records<T, E>(result: Result<T, hickory_resolver::net::NetError>, map: impl FnOnce(T) -> Vec<E>) -> Result<Vec<E>, String> {
+        match result {
+            Ok(v) => Ok(map(v)),
+            Err(e) if e.is_no_records_found() => Ok(vec![]),
+            Err(e) => Err(e.to_string()),
+        }
     }
+
+    // MX/NS/CNAME/SOA/TXT/CAA no longer have dedicated typed lookup methods;
+    // use the generic lookup and format each answer's RData via its Display
+    // impl (e.g. MX's Display already renders as "{preference} {exchange}").
+    let generic_lookup = |rtype: RecordType| async move {
+        ok_or_no_records(resolver.lookup(domain, rtype).await, |r| {
+            r.answers().iter().map(|rec| rec.data.to_string()).collect()
+        })
+    };
+
+    match record_type.to_uppercase().as_str() {
+        "A" => ok_or_no_records(resolver.lookup_ip(domain).await, |r| {
+            r.iter().filter(|ip| ip.is_ipv4()).map(|ip| ip.to_string()).collect()
+        }),
+        "AAAA" => ok_or_no_records(resolver.lookup_ip(domain).await, |r| {
+            r.iter().filter(|ip| ip.is_ipv6()).map(|ip| ip.to_string()).collect()
+        }),
+        "MX" => generic_lookup(RecordType::MX).await,
+        "NS" => generic_lookup(RecordType::NS).await,
+        "CNAME" => generic_lookup(RecordType::CNAME).await,
+        "PTR" => match domain.parse::<std::net::IpAddr>() {
+            Ok(ip) => {
+                let reverse_name = Name::from(ip);
+                ok_or_no_records(resolver.lookup(reverse_name, RecordType::PTR).await, |r| {
+                    r.answers().iter().map(|rec| rec.data.to_string()).collect()
+                })
+            }
+            Err(_) => Err(format!("Invalid IP address for PTR lookup: {domain}")),
+        },
+        "SOA" => generic_lookup(RecordType::SOA).await,
+        "TXT" => generic_lookup(RecordType::TXT).await,
+        "CAA" => generic_lookup(RecordType::CAA).await,
+        _ => Ok(vec![]),
+    }
+}
+
+/// Convenience wrapper for callers (validate/health/dmarc) that don't
+/// distinguish "no records" from "lookup failed" and just want a Vec.
+async fn resolve_record_lenient(resolver: &TokioResolver, domain: &str, record_type: &str) -> Vec<String> {
+    resolve_record(resolver, domain, record_type).await.unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------------
@@ -192,34 +199,52 @@ async fn resolve_record(
 // ---------------------------------------------------------------------------
 
 #[tauri::command]
-pub async fn dns_query(domain: String, record_type: String) -> Result<DnsResult, String> {
-    let system_resolver = make_system_resolver().map_err(|e| e.to_string())?;
-    let google_resolver = make_custom_resolver("8.8.8.8")?;
+pub async fn dns_query(
+    domain: String,
+    record_type: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<DnsResult, String> {
+    let resolvers = get_resolvers(&state).await?;
 
-    let (local, google) = tokio::join!(
-        resolve_record(&system_resolver, &domain, &record_type),
-        resolve_record(&google_resolver, &domain, &record_type),
+    let (local_result, google_result) = tokio::join!(
+        resolve_record(&resolvers.system, &domain, &record_type),
+        resolve_record(&resolvers.google, &domain, &record_type),
     );
 
+    let (local, local_error) = match local_result {
+        Ok(v) => (v, None),
+        Err(e) => (vec![], Some(e)),
+    };
+    let (google, google_error) = match google_result {
+        Ok(v) => (v, None),
+        Err(e) => (vec![], Some(e)),
+    };
+
     Ok(DnsResult {
-        ok: true,
+        ok: local_error.is_none() || google_error.is_none(),
         domain,
         record_type,
         local,
         google,
+        local_error,
+        google_error,
         error: None,
     })
 }
 
 #[tauri::command]
-pub async fn dns_validate(domain: String) -> Result<DnsValidateResult, String> {
-    let resolver = make_system_resolver().map_err(|e| e.to_string())?;
+pub async fn dns_validate(
+    domain: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<DnsValidateResult, String> {
+    let resolvers = get_resolvers(&state).await?;
+    let resolver = &resolvers.system;
 
-    let a_records = resolve_record(&resolver, &domain, "A").await;
-    let aaaa_records = resolve_record(&resolver, &domain, "AAAA").await;
-    let ns_records = resolve_record(&resolver, &domain, "NS").await;
-    let soa_records = resolve_record(&resolver, &domain, "SOA").await;
-    let caa_records = resolve_record(&resolver, &domain, "CAA").await;
+    let a_records = resolve_record_lenient(resolver, &domain, "A").await;
+    let aaaa_records = resolve_record_lenient(resolver, &domain, "AAAA").await;
+    let ns_records = resolve_record_lenient(resolver, &domain, "NS").await;
+    let soa_records = resolve_record_lenient(resolver, &domain, "SOA").await;
+    let caa_records = resolve_record_lenient(resolver, &domain, "CAA").await;
 
     let mut findings: Vec<DnsFinding> = Vec::new();
     let mut score: i32 = 100;
@@ -324,25 +349,26 @@ pub async fn dns_validate(domain: String) -> Result<DnsValidateResult, String> {
 }
 
 #[tauri::command]
-pub async fn dns_health(domain: String) -> Result<DnsHealthResult, String> {
-    let system_resolver = make_system_resolver().map_err(|e| e.to_string())?;
-    let cloudflare_resolver = make_custom_resolver("1.1.1.1")?;
-    let google_resolver = make_custom_resolver("8.8.8.8")?;
+pub async fn dns_health(
+    domain: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<DnsHealthResult, String> {
+    let resolvers = get_resolvers(&state).await?;
 
     let (sys_a, sys_aaaa, sys_ns) = tokio::join!(
-        resolve_record(&system_resolver, &domain, "A"),
-        resolve_record(&system_resolver, &domain, "AAAA"),
-        resolve_record(&system_resolver, &domain, "NS"),
+        resolve_record_lenient(&resolvers.system, &domain, "A"),
+        resolve_record_lenient(&resolvers.system, &domain, "AAAA"),
+        resolve_record_lenient(&resolvers.system, &domain, "NS"),
     );
     let (cf_a, cf_aaaa, cf_ns) = tokio::join!(
-        resolve_record(&cloudflare_resolver, &domain, "A"),
-        resolve_record(&cloudflare_resolver, &domain, "AAAA"),
-        resolve_record(&cloudflare_resolver, &domain, "NS"),
+        resolve_record_lenient(&resolvers.cloudflare, &domain, "A"),
+        resolve_record_lenient(&resolvers.cloudflare, &domain, "AAAA"),
+        resolve_record_lenient(&resolvers.cloudflare, &domain, "NS"),
     );
     let (goog_a, goog_aaaa, goog_ns) = tokio::join!(
-        resolve_record(&google_resolver, &domain, "A"),
-        resolve_record(&google_resolver, &domain, "AAAA"),
-        resolve_record(&google_resolver, &domain, "NS"),
+        resolve_record_lenient(&resolvers.google, &domain, "A"),
+        resolve_record_lenient(&resolvers.google, &domain, "AAAA"),
+        resolve_record_lenient(&resolvers.google, &domain, "NS"),
     );
 
     let mut sys_a_sorted = sys_a.clone();
@@ -400,11 +426,14 @@ pub async fn dns_health(domain: String) -> Result<DnsHealthResult, String> {
 }
 
 #[tauri::command]
-pub async fn dns_dmarc(domain: String) -> Result<DmarcResult, String> {
-    let resolver = make_system_resolver().map_err(|e| e.to_string())?;
+pub async fn dns_dmarc(
+    domain: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<DmarcResult, String> {
+    let resolvers = get_resolvers(&state).await?;
     let dmarc_domain = format!("_dmarc.{domain}");
 
-    let txt_records = resolve_record(&resolver, &dmarc_domain, "TXT").await;
+    let txt_records = resolve_record_lenient(&resolvers.system, &dmarc_domain, "TXT").await;
     let raw_output = txt_records.join("\n");
 
     let dmarc_record = txt_records

@@ -24,7 +24,10 @@ fn is_private_ip(ip: &str) -> bool {
 }
 
 #[tauri::command]
-pub async fn geoip_lookup(ip: String) -> Result<GeoIpResult, String> {
+pub async fn geoip_lookup(
+    ip: String,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<GeoIpResult, String> {
     if is_private_ip(&ip) {
         return Ok(GeoIpResult {
             ok: false,
@@ -43,8 +46,7 @@ pub async fn geoip_lookup(ip: String) -> Result<GeoIpResult, String> {
         ip
     );
 
-    let client = reqwest::Client::new();
-    let response = match tokio::time::timeout(Duration::from_secs(5), client.get(&url).send()).await {
+    let response = match tokio::time::timeout(Duration::from_secs(5), state.http_client.get(&url).send()).await {
         Ok(Ok(r)) => r,
         Ok(Err(e)) => {
             return Ok(GeoIpResult {

@@ -1600,6 +1600,27 @@ strong.critical { color: var(--danger); }
   display: none;
 }
 
+/* ── Error boundary fallback ── */
+.error-boundary-fallback {
+  margin: 24px;
+  padding: 20px;
+  border: 1px solid var(--danger, #e5484d);
+  border-radius: 8px;
+  background: rgba(229, 72, 77, 0.08);
+  color: var(--text, #e5e5e5);
+}
+
+.error-boundary-fallback .error-boundary-detail {
+  font-family: monospace;
+  font-size: 0.85em;
+  opacity: 0.75;
+  word-break: break-word;
+}
+
+.error-boundary-fallback button {
+  margin-top: 8px;
+}
+
 /* ── Notification bell badge ── */
 .notif-btn {
   position: relative;

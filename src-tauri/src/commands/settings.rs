@@ -42,6 +42,14 @@ pub async fn settings_write(
     let pretty = serde_json::to_string_pretty(&data)
         .map_err(|e| format!("Failed to serialize settings: {e}"))?;
 
+    const MAX_SETTINGS_BYTES: usize = 256 * 1024;
+    if pretty.len() > MAX_SETTINGS_BYTES {
+        return Err(format!(
+            "Settings payload too large ({} bytes, max {MAX_SETTINGS_BYTES})",
+            pretty.len()
+        ));
+    }
+
     tokio::fs::write(&settings_path, pretty.as_bytes())
         .await
         .map_err(|e| format!("Failed to write settings.json: {e}"))?;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useReducer } from 'react';
+import React, { useState, useEffect, useRef, useReducer, useMemo, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -12,6 +12,7 @@ import {
   getHealth,
   getTestMetrics,
   createTest,
+  parseIntOrDefault,
 } from '../../utils/networkUtils';
 
 function playAlert(type) {
@@ -160,21 +161,21 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
     }
   };
 
-  const pushNotification = (host, text) => {
+  const pushNotification = useCallback((host, text) => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       new Notification(`Ping: ${host}`, { body: text });
     }
-  };
+  }, []);
 
-  const stopTimer = (id) => {
+  const stopTimer = useCallback((id) => {
     const timer = timersRef.current.get(id);
     if (timer) {
       clearInterval(timer);
       timersRef.current.delete(id);
     }
-  };
+  }, []);
 
-  const samplePing = async (id) => {
+  const samplePing = useCallback(async (id) => {
     if (inFlightRef.current.has(id)) return;
     const target = testsRef.current.find((t) => t.id === id);
     if (!target || target.phase !== 'running') return;
@@ -222,9 +223,9 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
     } finally {
       inFlightRef.current.delete(id);
     }
-  };
+  }, [addNotification, pushNotification]);
 
-  const startTest = (id) => {
+  const startTest = useCallback((id) => {
     const target = testsRef.current.find((t) => t.id === id);
     const running = testsRef.current.filter((t) => t.phase === 'running').length;
     if (target && target.phase !== 'running' && running >= MAX_ACTIVE_SESSIONS) {
@@ -237,29 +238,29 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
     const interval = target?.interval ?? 1000;
     const timer = setInterval(() => samplePing(id), interval);
     timersRef.current.set(id, timer);
-  };
+  }, [stopTimer, samplePing]);
 
-  const pauseTest = (id) => {
+  const pauseTest = useCallback((id) => {
     stopTimer(id);
     dispatch({ type: 'SET_PHASE', id, phase: 'paused' });
-  };
+  }, [stopTimer]);
 
-  const stopTest = (id) => {
+  const stopTest = useCallback((id) => {
     stopTimer(id);
     dispatch({ type: 'SET_PHASE', id, phase: 'stopped' });
-  };
+  }, [stopTimer]);
 
-  const removeTest = (id) => {
+  const removeTest = useCallback((id) => {
     stopTimer(id);
     inFlightRef.current.delete(id);
     dispatch({ type: 'REMOVE', id });
-  };
+  }, [stopTimer]);
 
-  const setTestAlias = (id, alias) => {
+  const setTestAlias = useCallback((id, alias) => {
     dispatch({ type: 'SET_ALIAS', id, alias });
-  };
+  }, []);
 
-  const setTestInterval = (id, intervalMs) => {
+  const setTestInterval = useCallback((id, intervalMs) => {
     dispatch({ type: 'SET_INTERVAL', id, interval: intervalMs });
     const target = testsRef.current.find((t) => t.id === id);
     if (target?.phase === 'running') {
@@ -267,7 +268,11 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
       const timer = setInterval(() => samplePing(id), intervalMs);
       timersRef.current.set(id, timer);
     }
-  };
+  }, [stopTimer, samplePing]);
+
+  const toggleTestView = useCallback((id) => {
+    dispatch({ type: 'TOGGLE_VIEW', id });
+  }, []);
 
   const addTest = () => {
     const host = hostInput.trim();
@@ -377,21 +382,25 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
     saveSettings?.({ ping_favorites: favorites.filter((_, i) => i !== idx) });
   };
 
-  // KPI computations
-  const activeCount = tests.filter((t) => t.phase === 'running').length;
-  const allRtts = tests.flatMap((t) => t.points.map((p) => p.latency));
-  const globalAvgRtt =
-    allRtts.length > 0
-      ? (allRtts.reduce((a, b) => a + b, 0) / allRtts.length).toFixed(1)
-      : null;
-  const activeSent = tests.filter((t) => t.sent > 0);
-  const globalLoss =
-    activeSent.length > 0
-      ? (
-          activeSent.reduce((acc, t) => acc + ((t.sent - t.received) / t.sent * 100), 0) /
-          activeSent.length
-        ).toFixed(2)
-      : null;
+  // KPI computations — memoized so a sample landing on one monitor doesn't
+  // re-scan every point of every monitor on every render.
+  const { activeCount, globalAvgRtt, globalLoss } = useMemo(() => {
+    const active = tests.filter((t) => t.phase === 'running').length;
+    const allRtts = tests.flatMap((t) => t.points.map((p) => p.latency));
+    const avgRtt =
+      allRtts.length > 0
+        ? (allRtts.reduce((a, b) => a + b, 0) / allRtts.length).toFixed(1)
+        : null;
+    const activeSent = tests.filter((t) => t.sent > 0);
+    const loss =
+      activeSent.length > 0
+        ? (
+            activeSent.reduce((acc, t) => acc + ((t.sent - t.received) / t.sent * 100), 0) /
+            activeSent.length
+          ).toFixed(2)
+        : null;
+    return { activeCount: active, globalAvgRtt: avgRtt, globalLoss: loss };
+  }, [tests]);
 
   return (
     <section className="ping-dashboard">
@@ -510,7 +519,7 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
             min="1"
             max="65000"
             value={packetSize}
-            onChange={(e) => setPacketSize(Number.parseInt(e.target.value || '56', 10))}
+            onChange={(e) => setPacketSize(parseIntOrDefault(e.target.value, 56, 1, 65000))}
             style={{ width: 120 }}
           />
           <label className="checkbox-inline" style={{ margin: 0 }}>
@@ -553,7 +562,7 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
                 onPause={pauseTest}
                 onStop={stopTest}
                 onRemove={removeTest}
-                onToggleView={(id) => dispatch({ type: 'TOGGLE_VIEW', id })}
+                onToggleView={toggleTestView}
                 onSetAlias={setTestAlias}
                 onSetInterval={setTestInterval}
               />

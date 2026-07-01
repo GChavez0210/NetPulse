@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { runOnEnter } from '../trace/TraceTab';
-import { buildWhoisPresentation } from '../../utils/networkUtils';
+import { parseIntOrDefault } from '../../utils/networkUtils';
 
 export default function DiagnosticsTab() {
   // TCP Ping
   const [tcpHostInput, setTcpHostInput] = useState('');
   const [tcpPort, setTcpPort] = useState(443);
   const [tcpResult, setTcpResult] = useState(null);
+  const [tcpLoading, setTcpLoading] = useState(false);
 
   // MTR
   const [mtrHostInput, setMtrHostInput] = useState('');
@@ -19,11 +20,13 @@ export default function DiagnosticsTab() {
   const [dnsHostInput, setDnsHostInput] = useState('');
   const [dnsType, setDnsType] = useState('A');
   const [dnsResult, setDnsResult] = useState(null);
+  const [dnsLoading, setDnsLoading] = useState(false);
 
   // Port Scanner
   const [portScanHostInput, setPortScanHostInput] = useState('');
   const [portListInput, setPortListInput] = useState('22,80,443,3389');
   const [portScanResult, setPortScanResult] = useState(null);
+  const [portScanLoading, setPortScanLoading] = useState(false);
 
   // DNS Validation
   const [dnsValInput, setDnsValInput] = useState('');
@@ -35,25 +38,20 @@ export default function DiagnosticsTab() {
   const [dnsHealthLoading, setDnsHealthLoading] = useState(false);
   const [dnsHealthResult, setDnsHealthResult] = useState(null);
 
-  // DMARC Inspector
-  const [dmarcInput, setDmarcInput] = useState('');
-  const [dmarcLoading, setDmarcLoading] = useState(false);
-  const [dmarcResult, setDmarcResult] = useState(null);
-
-  // WHOIS
-  const [whoisInput, setWhoisInput] = useState('');
-  const [whoisData, setWhoisData] = useState(null);
-  const [whoisLoading, setWhoisLoading] = useState(false);
+  // DNSBL Check
+  const [dnsblInput, setDnsblInput] = useState('');
+  const [dnsblLoading, setDnsblLoading] = useState(false);
+  const [dnsblResult, setDnsblResult] = useState(null);
 
   const [status, setStatus] = useState('Ready.');
-
-  const whoisPresentation = buildWhoisPresentation(whoisData, whoisInput.trim());
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleTcpPing = async () => {
+    if (tcpLoading) return;
     const host = tcpHostInput.trim();
     if (!host) { setStatus('Enter a hostname or IP for TCP ping.'); return; }
+    setTcpLoading(true);
     setStatus(`Pinging TCP port ${tcpPort} on ${host}...`);
     setTcpResult(null);
     try {
@@ -64,10 +62,13 @@ export default function DiagnosticsTab() {
     } catch (error) {
       setTcpResult({ error: String(error?.message || error) });
       setStatus('TCP ping failed.');
+    } finally {
+      setTcpLoading(false);
     }
   };
 
   const handleMtrRun = async () => {
+    if (mtrLoading) return;
     const host = mtrHostInput.trim();
     if (!host) { setStatus('Enter a hostname or IP for MTR.'); return; }
     setMtrLoading(true);
@@ -78,14 +79,19 @@ export default function DiagnosticsTab() {
       setMtrResult(result);
       setStatus(`MTR diagnostic complete to ${host}.`);
       setMtrHostInput('');
+    } catch (error) {
+      setMtrResult({ error: String(error?.message || error) });
+      setStatus('MTR diagnostic failed.');
     } finally {
       setMtrLoading(false);
     }
   };
 
   const handleDnsQuery = async () => {
+    if (dnsLoading) return;
     const host = dnsHostInput.trim();
     if (!host) { setStatus('Enter a domain for DNS lookup.'); return; }
+    setDnsLoading(true);
     setStatus(`Running DNS query (${dnsType}) for ${host}...`);
     setDnsResult(null);
     try {
@@ -96,10 +102,13 @@ export default function DiagnosticsTab() {
     } catch (error) {
       setDnsResult({ error: String(error?.message || error) });
       setStatus('DNS query failed.');
+    } finally {
+      setDnsLoading(false);
     }
   };
 
   const handlePortScan = async () => {
+    if (portScanLoading) return;
     const host = portScanHostInput.trim();
     if (!host) { setStatus('Enter a host for port scan.'); return; }
     const ports = portListInput
@@ -108,6 +117,7 @@ export default function DiagnosticsTab() {
       .filter((v) => Number.isFinite(v) && v > 0 && v <= 65535)
       .slice(0, 32);
     if (ports.length === 0) { setStatus('Enter at least one valid port.'); return; }
+    setPortScanLoading(true);
     setStatus(`Scanning ${ports.length} ports on ${host}...`);
     setPortScanResult(null);
     try {
@@ -118,6 +128,8 @@ export default function DiagnosticsTab() {
     } catch (error) {
       setPortScanResult({ error: String(error?.message || error) });
       setStatus('Port scan failed.');
+    } finally {
+      setPortScanLoading(false);
     }
   };
 
@@ -159,46 +171,22 @@ export default function DiagnosticsTab() {
     }
   };
 
-  const handleDmarcValidate = async () => {
-    const target = dmarcInput.trim();
-    if (!target) return;
-    setDmarcLoading(true);
-    setDmarcResult(null);
-    setStatus(`Validating DMARC records for ${target}...`);
+  const handleDnsblCheck = async () => {
+    const ip = dnsblInput.trim();
+    if (!ip) return;
+    setDnsblLoading(true);
+    setDnsblResult(null);
+    setStatus(`Checking ${ip} against public blacklists...`);
     try {
-      const res = await invoke('dns_dmarc', { domain: target });
-      setDmarcResult(res);
-      setStatus(res.ok ? 'DMARC validation complete.' : 'DMARC validation failed.');
-      if (res.ok) setDmarcInput('');
+      const res = await invoke('dnsbl_check', { ip });
+      setDnsblResult(res);
+      setStatus(res.ok ? 'DNSBL check complete.' : (res.error || 'DNSBL check failed.'));
+      if (res.ok) setDnsblInput('');
     } catch (e) {
-      setDmarcResult({ ok: false, error: e.message });
-      setStatus('DMARC validation error.');
+      setDnsblResult({ ok: false, error: e.message });
+      setStatus('DNSBL check runtime error.');
     } finally {
-      setDmarcLoading(false);
-    }
-  };
-
-  const handleWhoisLookup = async () => {
-    const domain = whoisInput.trim();
-    if (!domain) return;
-    setWhoisLoading(true);
-    setWhoisData(null);
-    setStatus(`Running WHOIS lookup for ${domain}...`);
-    try {
-      const result = await invoke('whois_lookup', { query: domain });
-      if (result.ok) {
-        setWhoisData({ normalized: result.normalized, raw: result.raw, source: result.source || 'Apilayer', data: result.normalized });
-        setStatus(`WHOIS lookup complete via ${result.source || 'Apilayer'}.`);
-        setWhoisInput('');
-      } else {
-        setWhoisData(result.normalized ?? { error: result.error });
-        setStatus(result.error || 'WHOIS lookup failed.');
-      }
-    } catch (error) {
-      setWhoisData({ error: String(error?.message || error) });
-      setStatus('WHOIS lookup failed.');
-    } finally {
-      setWhoisLoading(false);
+      setDnsblLoading(false);
     }
   };
 
@@ -212,45 +200,29 @@ export default function DiagnosticsTab() {
     }
   };
 
-  const handleCopyWhois = async () => {
-    if (!whoisData) return;
-    try {
-      await navigator.clipboard.writeText(whoisPresentation.text);
-      setStatus('WHOIS results copied.');
-    } catch {
-      setStatus('Could not copy WHOIS results.');
-    }
-  };
-
-  const handleExportWhoisTxt = () => {
-    if (!whoisData) return;
-    const blob = new Blob([whoisPresentation.text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `whois-${whoisPresentation.queryDomain || 'lookup'}-${Date.now()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    setStatus('WHOIS TXT exported.');
-  };
-
   const formatDnsResult = (result) => {
     if (!result) return 'No DNS result yet.';
     if (result.error) return `Error: ${result.error}`;
     const lines = [];
     if (result.domain) lines.push(`Domain:      ${result.domain}`);
     if (result.record_type) lines.push(`Record Type: ${result.record_type}`);
-    if (result.local?.length) {
-      lines.push('');
-      lines.push('Local Resolver:');
+    lines.push('');
+    lines.push('Local Resolver:');
+    if (result.local_error) {
+      lines.push(`  Lookup failed: ${result.local_error}`);
+    } else if (result.local?.length) {
       result.local.forEach((r) => lines.push(`  ${r}`));
+    } else {
+      lines.push('  (no records found)');
     }
-    if (result.google?.length) {
-      lines.push('');
-      lines.push('Google (8.8.8.8):');
+    lines.push('');
+    lines.push('Google (8.8.8.8):');
+    if (result.google_error) {
+      lines.push(`  Lookup failed: ${result.google_error}`);
+    } else if (result.google?.length) {
       result.google.forEach((r) => lines.push(`  ${r}`));
+    } else {
+      lines.push('  (no records found)');
     }
     if (lines.length === 0) return JSON.stringify(result, null, 2);
     return lines.join('\n');
@@ -285,12 +257,14 @@ export default function DiagnosticsTab() {
               min="1"
               max="65535"
               value={tcpPort}
-              onChange={(e) => setTcpPort(Number.parseInt(e.target.value || '443', 10))}
+              onChange={(e) => setTcpPort(parseIntOrDefault(e.target.value, 443, 1, 65535))}
               placeholder="443"
               style={{ width: 90, flex: '0 0 90px' }}
             />
           </div>
-          <button className="diag-run-btn" onClick={handleTcpPing}>Run TCP Ping</button>
+          <button className="diag-run-btn" onClick={handleTcpPing} disabled={tcpLoading}>
+            {tcpLoading ? 'Pinging...' : 'Run TCP Ping'}
+          </button>
           <pre className="diag-log-pre">
             {tcpResult ? JSON.stringify(tcpResult, null, 2) : 'No TCP ping result yet.'}
           </pre>
@@ -311,7 +285,7 @@ export default function DiagnosticsTab() {
               min="2"
               max="30"
               value={mtrRounds}
-              onChange={(e) => setMtrRounds(Number.parseInt(e.target.value || '5', 10))}
+              onChange={(e) => setMtrRounds(parseIntOrDefault(e.target.value, 5, 2, 30))}
               placeholder="Rounds"
               style={{ width: 90, flex: '0 0 90px' }}
             />
@@ -347,7 +321,9 @@ export default function DiagnosticsTab() {
               <option value="PTR">PTR</option>
             </select>
           </div>
-          <button className="diag-run-btn" onClick={handleDnsQuery}>Run DNS Query</button>
+          <button className="diag-run-btn" onClick={handleDnsQuery} disabled={dnsLoading}>
+            {dnsLoading ? 'Querying...' : 'Run DNS Query'}
+          </button>
           <pre className="diag-log-pre">{formatDnsResult(dnsResult)}</pre>
         </article>
 
@@ -368,7 +344,9 @@ export default function DiagnosticsTab() {
               style={{ width: 120, flex: '0 0 120px' }}
             />
           </div>
-          <button className="diag-run-btn" onClick={handlePortScan}>Run Port Scan</button>
+          <button className="diag-run-btn" onClick={handlePortScan} disabled={portScanLoading}>
+            {portScanLoading ? 'Scanning...' : 'Run Port Scan'}
+          </button>
           <pre className="diag-log-pre">
             {portScanResult ? JSON.stringify(portScanResult, null, 2) : 'No port scan result yet.'}
           </pre>
@@ -430,79 +408,32 @@ export default function DiagnosticsTab() {
           </div>
         </article>
 
-        {/* DMARC Inspector */}
+        {/* DNSBL Check */}
         <article className="diag-card">
-          <h3>DMARC Inspector</h3>
+          <h3>DNSBL Blacklist Check</h3>
           <div className="diag-controls">
             <input
-              value={dmarcInput}
-              onChange={(e) => setDmarcInput(e.target.value)}
-              onKeyDown={(e) => runOnEnter(e, handleDmarcValidate)}
-              placeholder="Enter a domain"
+              value={dnsblInput}
+              onChange={(e) => setDnsblInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleDnsblCheck)}
+              placeholder="Enter an IPv4 address"
             />
           </div>
-          <button className="diag-run-btn" onClick={handleDmarcValidate} disabled={dmarcLoading}>
-            {dmarcLoading ? 'Inspecting...' : 'Inspect Records'}
+          <button className="diag-run-btn" onClick={handleDnsblCheck} disabled={dnsblLoading}>
+            {dnsblLoading ? 'Checking...' : 'Check Blacklists'}
           </button>
           <div className="diag-result-container">
             <pre className="diag-log-pre">
-              {dmarcResult
-                ? dmarcResult.rawOutput || JSON.stringify(dmarcResult, null, 2)
-                : 'No DMARC validation result yet.'}
+              {dnsblResult
+                ? dnsblResult.rawOutput || dnsblResult.error || JSON.stringify(dnsblResult, null, 2)
+                : 'No DNSBL check result yet.'}
             </pre>
-            {dmarcResult?.rawOutput && (
-              <button className="copy-sm-btn secondary" onClick={() => handleCopyRaw(dmarcResult.rawOutput)}>
+            {dnsblResult?.rawOutput && (
+              <button className="copy-sm-btn secondary" onClick={() => handleCopyRaw(dnsblResult.rawOutput)}>
                 Copy
               </button>
             )}
           </div>
-        </article>
-
-        {/* WHOIS Lookup */}
-        <article className="diag-card">
-          <h3>WHOIS Lookup</h3>
-          <div className="diag-controls">
-            <input
-              value={whoisInput}
-              onChange={(e) => setWhoisInput(e.target.value)}
-              onKeyDown={(e) => runOnEnter(e, handleWhoisLookup)}
-              placeholder="hostname or IP"
-            />
-          </div>
-          <button className="diag-run-btn" onClick={handleWhoisLookup} disabled={whoisLoading}>
-            {whoisLoading ? 'Running...' : 'WHOIS Lookup'}
-          </button>
-
-          {whoisData ? (
-            <div className="diag-result-container">
-              <div className="whois-inline-actions" style={{ marginBottom: 6 }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
-                  Query: {whoisPresentation.queryDomain}
-                </span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="copy-sm-btn secondary" onClick={handleCopyWhois}>Copy</button>
-                  <button className="copy-sm-btn secondary" onClick={handleExportWhoisTxt}>Export</button>
-                </div>
-              </div>
-              <pre className="diag-log-pre" style={{ fontSize: '0.78rem' }}>
-                {whoisPresentation.lines && whoisPresentation.lines.length > 0
-                  ? whoisPresentation.lines.map((line, i) => {
-                      if (line.type === 'blank') return <div key={i}>&nbsp;</div>;
-                      if (line.type === 'comment') return <div key={i} className="whois-comment">{line.value}</div>;
-                      if (line.type === 'section') return <div key={i} className="whois-section">{line.value}</div>;
-                      return (
-                        <div key={i}>
-                          <span className="whois-label">{line.label}:</span>{' '}
-                          <span className="whois-value">{line.value}</span>
-                        </div>
-                      );
-                    })
-                  : <div className="whois-value">{whoisPresentation.text}</div>}
-              </pre>
-            </div>
-          ) : (
-            <pre className="diag-log-pre">No WHOIS result yet.</pre>
-          )}
         </article>
 
       </div>
