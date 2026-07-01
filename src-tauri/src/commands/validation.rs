@@ -1,10 +1,14 @@
-#[allow(dead_code)]
 pub fn validate_host(host: &str) -> Result<(), String> {
     if host.is_empty() {
         return Err("Host must not be empty".to_string());
     }
     if host.len() > 253 {
         return Err("Host must be 253 characters or fewer".to_string());
+    }
+    // Reject a leading '-' so the host can never be interpreted as a flag
+    // by ping/tracert/traceroute when passed as a bare argv element.
+    if host.starts_with('-') {
+        return Err(format!("Host '{host}' must not start with '-'"));
     }
     // Allow alphanumeric, dots, hyphens, underscores, colons (IPv6), brackets (IPv6 literal), percent (zone ID)
     if !host.chars().all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | ':' | '[' | ']' | '%')) {

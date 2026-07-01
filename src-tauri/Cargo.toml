@@ -17,7 +17,7 @@ serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
-hickory-resolver = { version = "0.24", features = ["tokio-runtime"] }
+hickory-resolver = { version = "0.26", features = ["tokio", "system-config"] }
 futures = "0.3"
 rustls = { version = "0.23", default-features = false, features = ["ring", "tls12", "std"] }
 webpki-roots = "0.26"

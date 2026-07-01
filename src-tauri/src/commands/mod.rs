@@ -1,4 +1,5 @@
 pub mod dns;
+pub mod dnsbl;
 pub mod flood;
 pub mod geoip;
 pub mod oui;

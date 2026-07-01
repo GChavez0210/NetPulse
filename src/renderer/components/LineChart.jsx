@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   LineChart as ReLineChart,
   Line,
@@ -10,12 +10,11 @@ import {
   ReferenceLine
 } from 'recharts';
 
-export default function LineChart({ points, health, liveLabel, events }) {
-  const data = points.map((p, i) => ({
-    index: i,
-    latency: p.latency,
-    ts: p.ts
-  }));
+function LineChart({ points, health, liveLabel, events }) {
+  const data = useMemo(
+    () => points.map((p, i) => ({ index: i, latency: p.latency, ts: p.ts })),
+    [points]
+  );
 
   const color =
     health === 'down' ? '#ff4444' : health === 'degraded' ? '#ffaa00' : '#00ff88';
@@ -88,3 +87,5 @@ export default function LineChart({ points, health, liveLabel, events }) {
     </div>
   );
 }
+
+export default React.memo(LineChart);

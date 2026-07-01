@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 export const runOnEnter = (event, action) => {
@@ -113,8 +113,11 @@ export default function TraceTab({ addNotification }) {
   const [geoData, setGeoData] = useState({});
   const [geoLoading, setGeoLoading] = useState(false);
   const [status, setStatus] = useState('Ready.');
+  // Bumped on every new traceroute run; lets a slow, superseded GeoIP batch
+  // detect it's stale and avoid overwriting a newer trace's results.
+  const traceGenRef = useRef(0);
 
-  const fetchGeoData = async (hops) => {
+  const fetchGeoData = async (hops, generation) => {
     const uniqueIps = [
       ...new Set(
         hops
@@ -130,6 +133,7 @@ export default function TraceTab({ addNotification }) {
         invoke('geoip_lookup', { ip }).then((result) => ({ ip, result }))
       )
     );
+    if (generation !== traceGenRef.current) return; // a newer trace superseded this one
     const geoMap = {};
     for (const r of results) {
       if (r.status === 'fulfilled' && r.value.result.ok) {
@@ -146,6 +150,7 @@ export default function TraceTab({ addNotification }) {
       setStatus('Enter a hostname or IP for traceroute.');
       return;
     }
+    const generation = ++traceGenRef.current;
     setTraceLoading(true);
     setTraceHops([]);
     setGeoData({});
@@ -170,7 +175,7 @@ export default function TraceTab({ addNotification }) {
       );
       setTraceHost('');
       // Fetch GeoIP in background after results are shown
-      fetchGeoData(parsed.hops);
+      fetchGeoData(parsed.hops, generation);
     } catch (error) {
       const msg = String(error?.message || error);
       setTraceOutput(msg);

@@ -1,6 +1,9 @@
 use serde::Serialize;
 use std::time::Duration;
 use tokio::process::Command;
+
+use super::validation::validate_host;
+
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -13,6 +16,8 @@ pub struct TraceResult {
 
 #[tauri::command]
 pub async fn trace_run(host: String) -> Result<TraceResult, String> {
+    validate_host(&host)?;
+
     let mut cmd = if cfg!(target_os = "windows") {
         // cmd /c gives tracert a proper console context from a GUI (windowless) process.
         // -w 2000 caps per-hop wait to 2 s → 20 hops × 2 s = 40 s max, under the 60 s limit.
