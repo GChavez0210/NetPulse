@@ -1,6 +1,6 @@
 {
   "name": "netpulse",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "NetPulse — fast, focused network diagnostics. Built with Tauri + React + Vite.",
   "scripts": {
     "dev": "tauri dev",

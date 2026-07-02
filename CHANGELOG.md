@@ -5,6 +5,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and thi
 
 ---
 
+## [0.5.2] — 2026-07-02
+
+Security, stability, and efficiency audit — no new user-facing features.
+
+### Security
+- **Fixed:** `ping`/`trace`/`flood`/`tcp` commands now validate hosts before use, rejecting leading-dash values that could be interpreted as CLI flags by the underlying `ping`/`tracert` binaries.
+- **Fixed:** Migrated `hickory-resolver` 0.24 → 0.26, closing [RUSTSEC-2026-0119](https://github.com/hickory-dns/hickory-dns/security/advisories/GHSA-q2qq-hmj6-3wpp) (CPU-exhaustion DoS via O(n²) DNS name compression).
+- **Fixed:** Bumped `quinn-proto` to patch a separate high-severity (CVSS 7.5) remote memory-exhaustion CVE.
+- **Fixed:** WHOIS rate limiter had a TOCTOU race allowing concurrent lookups to bypass the 2s throttle; now serialized with a held mutex.
+- **Fixed:** DNSBL checks reported *any* lookup failure (timeouts, SERVFAIL) as "not listed"; now only genuine NXDOMAIN is treated as clean, other failures as inconclusive.
+
+### Stability
+- **Added:** A React error boundary around each tab, so a single bad payload or bug can no longer blank the entire app.
+- **Fixed:** `ping_run`/`ping_sample` had no timeout and could hang indefinitely.
+- **Fixed:** `flood_start` could spawn unbounded concurrent jobs sharing one cancel flag; now a second flood run is rejected while one is active.
+- **Fixed:** MTR diagnostic silently swallowed errors, leaving the UI stuck on "Running…"; diagnostic and DNS panel buttons now guard against overlapping in-flight requests.
+- **Fixed:** A slow, superseded GeoIP lookup batch could overwrite a newer traceroute's results, and could leave its loading indicator stuck.
+- **Fixed:** `dns_query` collapsed "lookup failed" and "no records found" into the same empty, successful result; the two are now distinguished.
+
+### Efficiency
+- **Changed:** DNS resolvers and the HTTP client are now built once and reused via shared app state instead of being rebuilt (and losing caches/connection pools) on every call.
+- **Changed:** Memoized the flood test's packet grid/log rendering, ping KPI aggregation, and WHOIS presentation to cut unnecessary re-renders.
+
+---
+
 ## [0.5.1] — 2026-06-13
 
 Release-pipeline maintenance only — no changes to application behavior.
