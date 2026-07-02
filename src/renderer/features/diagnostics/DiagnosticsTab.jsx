@@ -134,6 +134,7 @@ export default function DiagnosticsTab() {
   };
 
   const handleDnsValidate = async () => {
+    if (dnsValLoading) return;
     const target = dnsValInput.trim();
     if (!target) return;
     setDnsValLoading(true);
@@ -145,7 +146,7 @@ export default function DiagnosticsTab() {
       setStatus(res.ok ? 'DNS Validation complete.' : 'DNS Validation failed.');
       if (res.ok) setDnsValInput('');
     } catch (e) {
-      setDnsValResult({ ok: false, error: e.message });
+      setDnsValResult({ ok: false, error: String(e?.message || e) });
       setStatus('DNS Validation runtime error.');
     } finally {
       setDnsValLoading(false);
@@ -153,6 +154,7 @@ export default function DiagnosticsTab() {
   };
 
   const handleDnsHealth = async () => {
+    if (dnsHealthLoading) return;
     const target = dnsHealthInput.trim();
     if (!target) return;
     setDnsHealthLoading(true);
@@ -164,7 +166,7 @@ export default function DiagnosticsTab() {
       setStatus(res.ok ? 'Multi-Resolver Check complete.' : 'Health check failed.');
       if (res.ok) setDnsHealthInput('');
     } catch (e) {
-      setDnsHealthResult({ ok: false, error: e.message });
+      setDnsHealthResult({ ok: false, error: String(e?.message || e) });
       setStatus('Health Check runtime error.');
     } finally {
       setDnsHealthLoading(false);
@@ -172,6 +174,7 @@ export default function DiagnosticsTab() {
   };
 
   const handleDnsblCheck = async () => {
+    if (dnsblLoading) return;
     const ip = dnsblInput.trim();
     if (!ip) return;
     setDnsblLoading(true);
@@ -183,7 +186,7 @@ export default function DiagnosticsTab() {
       setStatus(res.ok ? 'DNSBL check complete.' : (res.error || 'DNSBL check failed.'));
       if (res.ok) setDnsblInput('');
     } catch (e) {
-      setDnsblResult({ ok: false, error: e.message });
+      setDnsblResult({ ok: false, error: String(e?.message || e) });
       setStatus('DNSBL check runtime error.');
     } finally {
       setDnsblLoading(false);
