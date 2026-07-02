@@ -5,6 +5,7 @@ use hickory_resolver::{
     TokioResolver,
 };
 use serde::Serialize;
+use std::time::Duration;
 
 #[derive(Serialize)]
 pub struct DnsResult {
@@ -510,13 +511,31 @@ pub async fn mtr_run(host: String, rounds: u32) -> Result<MtrResult, String> {
 
     let rounds = rounds.clamp(2, 30);
 
-    // Run up to 5 traceroute rounds concurrently instead of sequentially.
-    let trace_results = futures::stream::iter(
-        (0..rounds).map(|_| super::trace::trace_run(host.clone())),
+    // Run up to 5 traceroute rounds concurrently instead of sequentially, but
+    // bound the whole operation to a wall-clock deadline — each round is a
+    // full external tracert/traceroute process (up to 90s), so an unbounded
+    // 30-round run could otherwise tie up the machine for several minutes.
+    // Whatever rounds finish before the deadline are still used; a slow
+    // target just yields a result built from fewer samples.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
+    let trace_host = host.clone();
+    let mut stream = futures::stream::iter(
+        (0..rounds).map(move |_| super::trace::trace_run(trace_host.clone())),
     )
-    .buffer_unordered(5)
-    .collect::<Vec<_>>()
-    .await;
+    .buffer_unordered(5);
+    let mut trace_results = Vec::new();
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match tokio::time::timeout(remaining, stream.next()).await {
+            Ok(Some(r)) => trace_results.push(r),
+            Ok(None) => break, // all rounds finished
+            Err(_) => break,   // deadline reached with rounds still in flight
+        }
+    }
+    drop(stream);
 
     // hop_number → list of (ip, rtt_ms) per round
     let mut hop_data: HashMap<u32, Vec<(String, Option<f64>)>> = HashMap::new();

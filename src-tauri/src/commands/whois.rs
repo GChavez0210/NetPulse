@@ -42,20 +42,39 @@ async fn raw_tcp_whois(server: &str, query: &str) -> Result<String, String> {
 
     let mut response = Vec::new();
     let mut buf = [0u8; 4096];
+    // Distinguish a clean EOF (server finished sending) from a read timeout,
+    // read error, or hitting the size cap — all of which mean the response
+    // may be incomplete, unlike Ok(Ok(0)) which means it's genuinely done.
+    let mut truncated = false;
     loop {
         match tokio::time::timeout(Duration::from_secs(10), stream.read(&mut buf)).await {
-            Ok(Ok(0)) | Err(_) => break,
+            Ok(Ok(0)) => break,
             Ok(Ok(n)) => {
                 response.extend_from_slice(&buf[..n]);
                 if response.len() >= 51_200 {
+                    truncated = true;
                     break;
                 }
             }
-            Ok(Err(_)) => break,
+            Ok(Err(_)) => {
+                truncated = true;
+                break;
+            }
+            Err(_) => {
+                truncated = true;
+                break;
+            }
         }
     }
 
-    Ok(String::from_utf8_lossy(&response).to_string())
+    let mut text = String::from_utf8_lossy(&response).to_string();
+    if truncated {
+        text.push_str(
+            "\n\n[NetPulse] Warning: this response may be incomplete — the connection \
+             timed out or was cut off before the server finished sending data.\n",
+        );
+    }
+    Ok(text)
 }
 
 /// Parse a "refer: server" or "whois: server" line from an IANA response.

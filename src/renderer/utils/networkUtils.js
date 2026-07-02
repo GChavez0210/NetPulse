@@ -98,7 +98,14 @@ export function listValue(value) {
 }
 
 export function buildWhoisPresentation(dataWrapper, domain) {
-  const isRdap = dataWrapper?.source === 'RDAP';
+  // Match on the source label the backend uses today, but fall back to a
+  // structural check (rdap_server is only ever populated by the RDAP path)
+  // so a future label change on either side can't silently misroute this
+  // into the domain-WHOIS formatting branch below.
+  const isRdap =
+    dataWrapper?.source === 'RDAP' ||
+    dataWrapper?.source?.startsWith?.('RDAP') ||
+    typeof dataWrapper?.normalized?.rdap_server === 'string';
   if (isRdap) {
     const payload = dataWrapper?.normalized || {};
     const ip = dataWrapper?.query || domain || 'unknown';

@@ -265,6 +265,13 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
 
   const setTestInterval = useCallback((id, intervalMs) => {
     dispatch({ type: 'SET_INTERVAL', id, interval: intervalMs });
+    // testsRef only syncs to the new `tests` state via an effect after the
+    // next render/commit. Patch it synchronously too so a startTest() call
+    // for this id in the same tick (e.g. change interval while paused, then
+    // immediately click Resume) can't read the stale pre-change interval.
+    testsRef.current = testsRef.current.map((t) =>
+      t.id === id ? { ...t, interval: intervalMs } : t
+    );
     const target = testsRef.current.find((t) => t.id === id);
     if (target?.phase === 'running') {
       stopTimer(id);
