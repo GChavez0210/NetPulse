@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { runOnEnter } from '../trace/TraceTab';
+import { buildWhoisPresentation, parseIntOrDefault } from '../../utils/networkUtils';
 
 export default function ReconTab() {
   // SSL / TLS
@@ -24,7 +25,22 @@ export default function ReconTab() {
   const [macLoading, setMacLoading] = useState(false);
   const [macResult, setMacResult] = useState(null);
 
+  // DMARC Inspector
+  const [dmarcInput, setDmarcInput] = useState('');
+  const [dmarcLoading, setDmarcLoading] = useState(false);
+  const [dmarcResult, setDmarcResult] = useState(null);
+
+  // WHOIS
+  const [whoisInput, setWhoisInput] = useState('');
+  const [whoisData, setWhoisData] = useState(null);
+  const [whoisLoading, setWhoisLoading] = useState(false);
+
   const [status, setStatus] = useState('Ready.');
+
+  const whoisPresentation = useMemo(
+    () => buildWhoisPresentation(whoisData, whoisInput.trim()),
+    [whoisData, whoisInput]
+  );
 
   const copyText = async (text) => {
     if (!text) return;
@@ -115,6 +131,73 @@ export default function ReconTab() {
     }
   };
 
+  const handleDmarcValidate = async () => {
+    const target = dmarcInput.trim();
+    if (!target) return;
+    setDmarcLoading(true);
+    setDmarcResult(null);
+    setStatus(`Validating DMARC records for ${target}...`);
+    try {
+      const res = await invoke('dns_dmarc', { domain: target });
+      setDmarcResult(res);
+      setStatus(res.ok ? 'DMARC validation complete.' : 'DMARC validation failed.');
+      if (res.ok) setDmarcInput('');
+    } catch (e) {
+      setDmarcResult({ ok: false, error: e.message });
+      setStatus('DMARC validation error.');
+    } finally {
+      setDmarcLoading(false);
+    }
+  };
+
+  const handleWhoisLookup = async () => {
+    const domain = whoisInput.trim();
+    if (!domain) return;
+    setWhoisLoading(true);
+    setWhoisData(null);
+    setStatus(`Running WHOIS lookup for ${domain}...`);
+    try {
+      const result = await invoke('whois_lookup', { query: domain });
+      if (result.ok) {
+        setWhoisData({ normalized: result.normalized, raw: result.raw, source: result.source || 'Apilayer', data: result.normalized });
+        setStatus(`WHOIS lookup complete via ${result.source || 'Apilayer'}.`);
+        setWhoisInput('');
+      } else {
+        setWhoisData(result.normalized ?? { error: result.error });
+        setStatus(result.error || 'WHOIS lookup failed.');
+      }
+    } catch (error) {
+      setWhoisData({ error: String(error?.message || error) });
+      setStatus('WHOIS lookup failed.');
+    } finally {
+      setWhoisLoading(false);
+    }
+  };
+
+  const handleCopyWhois = async () => {
+    if (!whoisData) return;
+    try {
+      await navigator.clipboard.writeText(whoisPresentation.text);
+      setStatus('WHOIS results copied.');
+    } catch {
+      setStatus('Could not copy WHOIS results.');
+    }
+  };
+
+  const handleExportWhoisTxt = () => {
+    if (!whoisData) return;
+    const blob = new Blob([whoisPresentation.text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `whois-${whoisPresentation.queryDomain || 'lookup'}-${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setStatus('WHOIS TXT exported.');
+  };
+
   // ── Render helpers ─────────────────────────────────────────────────────────
 
   const sslExpiredClass =
@@ -152,7 +235,7 @@ export default function ReconTab() {
               min="1"
               max="65535"
               value={sslPort}
-              onChange={(e) => setSslPort(Number.parseInt(e.target.value || '443', 10))}
+              onChange={(e) => setSslPort(parseIntOrDefault(e.target.value, 443, 1, 65535))}
               placeholder="443"
               style={{ width: 80, flex: '0 0 80px' }}
             />
@@ -311,6 +394,87 @@ export default function ReconTab() {
             </pre>
           ) : (
             <pre className="diag-log-pre">No result yet.</pre>
+          )}
+        </article>
+
+        {/* ── DMARC Inspector ─────────────────────────────────────────────── */}
+        <article className="diag-card">
+          <h3>DMARC Inspector</h3>
+          <p className="diag-card-desc">
+            Validates DMARC policy tags for a domain.
+          </p>
+          <div className="diag-controls">
+            <input
+              value={dmarcInput}
+              onChange={(e) => setDmarcInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleDmarcValidate)}
+              placeholder="Enter a domain"
+            />
+          </div>
+          <button className="diag-run-btn" onClick={handleDmarcValidate} disabled={dmarcLoading}>
+            {dmarcLoading ? 'Inspecting...' : 'Inspect Records'}
+          </button>
+          <div className="diag-result-container">
+            <pre className="diag-log-pre">
+              {dmarcResult
+                ? dmarcResult.rawOutput || JSON.stringify(dmarcResult, null, 2)
+                : 'No DMARC validation result yet.'}
+            </pre>
+            {dmarcResult?.rawOutput && (
+              <button className="copy-sm-btn secondary" onClick={() => copyText(dmarcResult.rawOutput)}>
+                Copy
+              </button>
+            )}
+          </div>
+        </article>
+
+        {/* ── WHOIS Lookup ─────────────────────────────────────────────────── */}
+        <article className="diag-card">
+          <h3>WHOIS Lookup</h3>
+          <p className="diag-card-desc">
+            Registry ownership and RDAP details for a hostname or IP.
+          </p>
+          <div className="diag-controls">
+            <input
+              value={whoisInput}
+              onChange={(e) => setWhoisInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleWhoisLookup)}
+              placeholder="hostname or IP"
+            />
+          </div>
+          <button className="diag-run-btn" onClick={handleWhoisLookup} disabled={whoisLoading}>
+            {whoisLoading ? 'Running...' : 'WHOIS Lookup'}
+          </button>
+
+          {whoisData ? (
+            <div className="diag-result-container">
+              <div className="whois-inline-actions" style={{ marginBottom: 6 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                  Query: {whoisPresentation.queryDomain}
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="copy-sm-btn secondary" onClick={handleCopyWhois}>Copy</button>
+                  <button className="copy-sm-btn secondary" onClick={handleExportWhoisTxt}>Export</button>
+                </div>
+              </div>
+              <pre className="diag-log-pre" style={{ fontSize: '0.78rem' }}>
+                {whoisPresentation.lines && whoisPresentation.lines.length > 0
+                  ? whoisPresentation.lines.map((line, i) => {
+                      if (line.type === 'blank') return <div key={i}>&nbsp;</div>;
+                      if (line.type === 'comment') return <div key={i} className="whois-comment">{line.value}</div>;
+                      if (line.type === 'section') return <div key={i} className="whois-section">{line.value}</div>;
+                      return (
+                        <div key={i}>
+                          <span className="whois-label">{line.label}:</span>{' '}
+                          <span className="whois-value">{line.value}</span>
+                        </div>
+                      );
+                    })
+                  : <div className="whois-value">{whoisPresentation.text}</div>}
+              </pre>
+            </div>
+          ) : (
+            <pre className="diag-log-pre">No WHOIS result yet.</pre>
           )}
         </article>
 

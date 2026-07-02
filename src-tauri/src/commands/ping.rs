@@ -1,5 +1,9 @@
 use serde::Serialize;
+use std::time::Duration;
 use tokio::process::Command;
+
+use super::validation::validate_host;
+
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -82,6 +86,8 @@ fn has_reply(output: &str) -> bool {
 
 #[tauri::command]
 pub async fn ping_run(host: String) -> Result<PingResult, String> {
+    validate_host(&host)?;
+
     let mut cmd = if cfg!(target_os = "windows") {
         let mut c = Command::new("ping");
         c.args(["-n", "4", &host]);
@@ -96,10 +102,18 @@ pub async fn ping_run(host: String) -> Result<PingResult, String> {
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| format!("Failed to spawn ping: {e}"))?;
+    let output = match tokio::time::timeout(Duration::from_secs(10), cmd.output()).await {
+        Ok(res) => res.map_err(|e| format!("Failed to spawn ping: {e}"))?,
+        Err(_) => {
+            return Ok(PingResult {
+                ok: false,
+                host,
+                latency_ms: None,
+                output: String::new(),
+                error: Some("Ping timed out after 10 seconds".to_string()),
+            })
+        }
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -123,6 +137,8 @@ pub async fn ping_sample(
     packet_size: Option<u32>,
     dont_fragment: Option<bool>,
 ) -> Result<PingResult, String> {
+    validate_host(&host)?;
+
     let mut cmd = if cfg!(target_os = "windows") {
         let mut c = Command::new("ping");
         c.args(["-n", "1", "-w", "1000"]);
@@ -164,10 +180,18 @@ pub async fn ping_sample(
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);
 
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| format!("Failed to spawn ping: {e}"))?;
+    let output = match tokio::time::timeout(Duration::from_secs(5), cmd.output()).await {
+        Ok(res) => res.map_err(|e| format!("Failed to spawn ping: {e}"))?,
+        Err(_) => {
+            return Ok(PingResult {
+                ok: false,
+                host,
+                latency_ms: None,
+                output: String::new(),
+                error: Some("Request timed out".to_string()),
+            })
+        }
+    };
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();

@@ -1,5 +1,4 @@
 use serde::Serialize;
-use std::sync::atomic::Ordering;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -14,13 +13,9 @@ pub struct WhoisResult {
     pub error: Option<String>,
 }
 
-/// Returns true if the string looks like an IPv4 address.
+/// Returns true if the string is a valid IPv4 address.
 fn is_ipv4(s: &str) -> bool {
-    let re_parts: Vec<&str> = s.split('.').collect();
-    if re_parts.len() != 4 {
-        return false;
-    }
-    re_parts.iter().all(|p| p.parse::<u8>().is_ok())
+    s.parse::<std::net::Ipv4Addr>().is_ok()
 }
 
 /// Returns true if the string is a valid IPv6 address.
@@ -95,7 +90,7 @@ fn whois_to_rdap_base(whois_host: &str) -> Option<&'static str> {
 }
 
 /// Handle RDAP lookup for IP addresses, bootstrapping the correct RIR via IANA WHOIS.
-async fn rdap_lookup(ip: &str) -> WhoisResult {
+async fn rdap_lookup(ip: &str, http_client: &reqwest::Client) -> WhoisResult {
     // Step 1: Ask IANA WHOIS which RIR handles this IP.
     let iana_response = raw_tcp_whois("whois.iana.org", ip)
         .await
@@ -120,9 +115,8 @@ async fn rdap_lookup(ip: &str) -> WhoisResult {
 
     // Step 3: Query the RIR RDAP server directly.
     let url = format!("{rdap_base}/ip/{ip}");
-    let client = reqwest::Client::new();
 
-    let response = match client.get(&url).send().await {
+    let response = match http_client.get(&url).send().await {
         Ok(r) => r,
         Err(e) => {
             return WhoisResult {
@@ -330,26 +324,26 @@ pub async fn whois_lookup(
     }
 
     // Enforce a 2-second minimum gap between WHOIS queries to avoid getting blocked.
-    let now_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
-    let last_ms = state.last_whois_ms.load(Ordering::Relaxed);
-    let min_gap_ms = 2_000u64;
-    if now_ms.saturating_sub(last_ms) < min_gap_ms {
-        let wait = min_gap_ms - now_ms.saturating_sub(last_ms);
-        tokio::time::sleep(Duration::from_millis(wait)).await;
-    }
-    state.last_whois_ms.store(
+    // The mutex is held across the check+sleep+update so two concurrent calls
+    // can't both read the same last_ms and both slip through the gap.
+    fn now_ms() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
-            .as_millis() as u64,
-        Ordering::Relaxed,
-    );
+            .as_millis() as u64
+    }
+    {
+        let mut last_ms = state.last_whois_ms.lock().await;
+        let min_gap_ms = 2_000u64;
+        let elapsed = now_ms().saturating_sub(*last_ms);
+        if elapsed < min_gap_ms {
+            tokio::time::sleep(Duration::from_millis(min_gap_ms - elapsed)).await;
+        }
+        *last_ms = now_ms();
+    }
 
     if is_ipv4(&query) || is_ipv6(&query) {
-        Ok(rdap_lookup(&query).await)
+        Ok(rdap_lookup(&query, &state.http_client).await)
     } else {
         Ok(raw_whois_lookup(&query).await)
     }

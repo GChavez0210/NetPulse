@@ -2,6 +2,8 @@ use serde::Serialize;
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
 
+use super::validation::validate_host;
+
 #[derive(Serialize)]
 pub struct TcpPingResult {
     pub ok: bool,
@@ -72,6 +74,7 @@ async fn probe_port(host: &str, port: u16, timeout_ms: u64) -> TcpPingResult {
 
 #[tauri::command]
 pub async fn tcp_ping(host: String, port: u16, timeout_ms: u64) -> Result<TcpPingResult, String> {
+    validate_host(&host)?;
     Ok(probe_port(&host, port, timeout_ms).await)
 }
 
@@ -81,9 +84,7 @@ pub async fn port_scan(
     ports: Vec<u16>,
     timeout_ms: u64,
 ) -> Result<PortScanResult, String> {
-    if host.is_empty() {
-        return Err("Host must not be empty".to_string());
-    }
+    validate_host(&host)?;
 
     // Deduplicate and cap at 32
     let mut deduped: Vec<u16> = {

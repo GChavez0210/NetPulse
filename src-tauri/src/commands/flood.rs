@@ -34,6 +34,15 @@ pub struct FloodStartResult {
     pub status: String,
 }
 
+/// Clears `flood_running` on drop, whichever way the spawned task exits.
+struct RunningGuard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+
+impl Drop for RunningGuard {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+}
+
 /// Format current local time as "HH:MM:SS.mmm"
 fn format_time() -> String {
     let now = SystemTime::now()
@@ -164,19 +173,31 @@ pub async fn flood_start(
     app_handle: tauri::AppHandle,
 ) -> Result<FloodStartResult, String> {
     // Validate inputs
-    if host.is_empty() || host.len() > 253 {
-        return Err("Invalid host: must be 1–253 characters".to_string());
-    }
+    super::validation::validate_host(&host)?;
     if count != 100 && count != 1000 {
         return Err("Count must be 100 or 1000".to_string());
     }
     let _ = mode; // only ICMP supported for now
 
+    // Reject a second concurrent flood job — the cancel flag is shared, so
+    // running two jobs at once means cancelling one cancels/races both.
+    if state
+        .flood_running
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return Err("A flood test is already running. Cancel it before starting a new one.".to_string());
+    }
+
     // Reset cancel flag
     state.flood_cancel.store(false, Ordering::SeqCst);
     let cancel_flag = state.flood_cancel.clone();
+    let running_flag = state.flood_running.clone();
 
     tokio::spawn(async move {
+        // Ensure the running flag is cleared however this task exits.
+        let _guard = RunningGuard(running_flag);
+
         let emit = |event: &str, payload: serde_json::Value| {
             if let Err(e) = app_handle.emit(event, payload) {
                 eprintln!("[flood] emit '{event}' failed: {e}");

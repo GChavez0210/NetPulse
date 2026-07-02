@@ -25,7 +25,7 @@ function healthPill(health) {
   return { label: 'STABLE', cls: 'pill-stable' };
 }
 
-export default function PingCard({
+function PingCard({
   test,
   onStart,
   onPause,
@@ -214,3 +214,7 @@ export default function PingCard({
     </article>
   );
 }
+
+// Memoized so a sample landing on one monitor only re-renders that card,
+// not every card in the grid — requires callers to pass stable callback refs.
+export default React.memo(PingCard);

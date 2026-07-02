@@ -3,6 +3,15 @@ export const DOWN_THRESHOLD = 3;
 export const MAX_ACTIVE_SESSIONS = 16;
 export const HEALTH_WINDOW = 100;
 
+// Parses a numeric input value, falling back to `fallback` when the input is
+// empty, non-numeric, or out of [min, max] — guards against NaN slipping
+// through to invoke() when a number field is cleared or mid-edit.
+export function parseIntOrDefault(value, fallback, min = -Infinity, max = Infinity) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) return fallback;
+  return parsed;
+}
+
 export const HEALTH = {
   NORMAL: 'normal',
   DEGRADED: 'degraded',

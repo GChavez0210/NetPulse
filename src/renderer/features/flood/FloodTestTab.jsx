@@ -1,16 +1,52 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { runOnEnter } from '../trace/TraceTab';
 import { getFloodPacketState } from '../../utils/networkUtils';
+
+// Memoized so React can bail out of re-rendering the ~999 unchanged cells
+// on every single-packet sample update instead of re-diffing all of them.
+const PacketCell = memo(function PacketCell({ state }) {
+  return <span className={`pkt ${state}`} />;
+});
+
+const SequenceGrid = memo(function SequenceGrid({ packetStates }) {
+  return (
+    <div className="sequence-grid">
+      {packetStates.map((state, index) => (
+        <PacketCell key={index} state={state} />
+      ))}
+    </div>
+  );
+});
+
+const DiagLog = memo(function DiagLog({ logLines }) {
+  return (
+    <pre className="diag-log-pre">
+      {logLines.map((line) => (
+        <div key={line.id} className={`diag-line ${line.type}`}>
+          {line.text}
+        </div>
+      ))}
+    </pre>
+  );
+});
 
 export default function FloodTestTab({ addNotification }) {
   const [floodHostInput, setFloodHostInput] = useState('');
   const [rapidCount, setRapidCount] = useState(100);
   const hostRef = useRef('');
   const [rapidRunning, setRapidRunning] = useState(false);
+  // Mirrors rapidRunning for the unmount-cleanup effect below, which only
+  // needs the latest value and shouldn't itself be a dependency of that effect.
+  const rapidRunningRef = useRef(false);
+  useEffect(() => { rapidRunningRef.current = rapidRunning; }, [rapidRunning]);
   const [status, setStatus] = useState('Ready.');
-  const [rapidDetails, setRapidDetails] = useState({
+  // Stable, ever-increasing ids for log lines so React keys stay stable across
+  // the .slice(-700) trim (index-based keys would shift and force full remounts).
+  const logIdRef = useRef(0);
+  const makeLine = (type, text) => ({ id: ++logIdRef.current, type, text });
+  const [rapidDetails, setRapidDetails] = useState(() => ({
     host: '',
     mode: 'ICMP',
     sent: 0,
@@ -26,8 +62,8 @@ export default function FloodTestTab({ addNotification }) {
     lossStreakMax: 0,
     status: 'idle',
     packetStates: [],
-    logLines: [{ type: 'meta', text: '[init] Ready for packet loss diagnostics.' }]
-  });
+    logLines: [makeLine('meta', '[init] Ready for packet loss diagnostics.')]
+  }));
 
   useEffect(() => {
     let cancelled = false;
@@ -62,7 +98,7 @@ export default function FloodTestTab({ addNotification }) {
             lossPct,
             jitterCount,
             packetStates: nextStates,
-            logLines: [...prev.logLines, { type: logType, text: logText }].slice(-700)
+            logLines: [...prev.logLines, makeLine(logType, logText)].slice(-700)
           };
         });
       });
@@ -89,10 +125,10 @@ export default function FloodTestTab({ addNotification }) {
           status: summary.status || 'done',
           logLines: [
             ...prev.logLines,
-            {
-              type: 'meta',
-              text: `[${new Date().toISOString()}] Flood ${summary.status || 'done'}: sent=${summary.sent}, recv=${summary.received}, loss=${summary.loss_pct}%`
-            }
+            makeLine(
+              'meta',
+              `[${new Date().toISOString()}] Flood ${summary.status || 'done'}: sent=${summary.sent}, recv=${summary.received}, loss=${summary.loss_pct}%`
+            )
           ].slice(-700)
         }));
         addNotification?.(
@@ -121,10 +157,7 @@ export default function FloodTestTab({ addNotification }) {
           logLines: payload.message
             ? [
                 ...prev.logLines,
-                {
-                  type: payload.status === 'error' ? 'failed' : 'meta',
-                  text: payload.message
-                }
+                makeLine(payload.status === 'error' ? 'failed' : 'meta', payload.message)
               ].slice(-700)
             : prev.logLines
         }));
@@ -138,7 +171,7 @@ export default function FloodTestTab({ addNotification }) {
     return () => {
       cancelled = true;
       unlisteners.forEach((u) => u());
-      invoke('flood_cancel').catch(() => {});
+      if (rapidRunningRef.current) invoke('flood_cancel').catch(() => {});
     };
   }, []);
 
@@ -164,7 +197,7 @@ export default function FloodTestTab({ addNotification }) {
       status: 'working',
       packetStates: Array.from({ length: rapidCount }, () => 'pending'),
       logLines: [
-        { type: 'meta', text: `[init] Starting rapid ICMP test for ${host} (${rapidCount} pings)...` }
+        makeLine('meta', `[init] Starting rapid ICMP test for ${host} (${rapidCount} pings)...`)
       ]
     });
 
@@ -181,7 +214,7 @@ export default function FloodTestTab({ addNotification }) {
           status: 'error',
           logLines: [
             ...prev.logLines,
-            { type: 'failed', text: startResult?.error || 'Start failed.' }
+            makeLine('failed', startResult?.error || 'Start failed.')
           ]
         }));
       } else {
@@ -194,7 +227,7 @@ export default function FloodTestTab({ addNotification }) {
         status: 'error',
         logLines: [
           ...prev.logLines,
-          { type: 'failed', text: String(error?.message || error) }
+          makeLine('failed', String(error?.message || error))
         ]
       }));
     }
@@ -330,21 +363,11 @@ export default function FloodTestTab({ addNotification }) {
             </div>
           </div>
 
-          <div className="sequence-grid">
-            {rapidDetails.packetStates.map((state, index) => (
-              <span key={`pkt-${index}`} className={`pkt ${state}`} />
-            ))}
-          </div>
+          <SequenceGrid packetStates={rapidDetails.packetStates} />
 
           <section className="diag-log">
             <h4>Diagnostic Log</h4>
-            <pre className="diag-log-pre">
-              {rapidDetails.logLines.map((line, index) => (
-                <div key={`log-${index}`} className={`diag-line ${line.type}`}>
-                  {line.text}
-                </div>
-              ))}
-            </pre>
+            <DiagLog logLines={rapidDetails.logLines} />
           </section>
         </section>
       </div>

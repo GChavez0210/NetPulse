@@ -1,15 +1,27 @@
 mod commands;
 
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tauri::Manager;
 
 pub struct AppState {
     pub flood_cancel: Arc<AtomicBool>,
+    /// Set while a flood job is active so a second flood_start can't spawn a
+    /// concurrent job that would race the single shared cancel flag.
+    pub flood_running: Arc<AtomicBool>,
     /// Shared SQLite connection for OUI MAC lookups (initialized in setup).
     pub oui_conn: Arc<std::sync::Mutex<Option<rusqlite::Connection>>>,
     /// Unix-epoch milliseconds of the last WHOIS query (for rate limiting).
-    pub last_whois_ms: Arc<AtomicU64>,
+    /// Held across the throttle check+sleep+update so concurrent calls can't
+    /// both read a stale timestamp and bypass the gap.
+    pub last_whois_ms: Arc<tokio::sync::Mutex<u64>>,
+    /// Lazily-built, shared DNS resolvers (system/Google/Cloudflare) reused
+    /// across dns_query/dns_validate/dns_health/dns_dmarc/dnsbl_check instead
+    /// of rebuilding a resolver (and losing its lookup cache) on every call.
+    pub dns_resolvers: Arc<tokio::sync::OnceCell<commands::dns::DnsResolvers>>,
+    /// Shared reqwest client reused by simple single-shot HTTP callers
+    /// (GeoIP, RDAP) instead of paying connection-pool/TLS setup per call.
+    pub http_client: reqwest::Client,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -17,8 +29,11 @@ pub fn run() {
     tauri::Builder::default()
         .manage(AppState {
             flood_cancel: Arc::new(AtomicBool::new(false)),
+            flood_running: Arc::new(AtomicBool::new(false)),
             oui_conn: Arc::new(std::sync::Mutex::new(None)),
-            last_whois_ms: Arc::new(AtomicU64::new(0)),
+            last_whois_ms: Arc::new(tokio::sync::Mutex::new(0)),
+            dns_resolvers: Arc::new(tokio::sync::OnceCell::new()),
+            http_client: reqwest::Client::new(),
         })
         .setup(|app| {
             // Open the OUI SQLite database once at startup and keep it in AppState.
@@ -64,6 +79,7 @@ pub fn run() {
             commands::dns::dns_health,
             commands::dns::dns_dmarc,
             commands::dns::mtr_run,
+            commands::dnsbl::dnsbl_check,
             commands::whois::whois_lookup,
             commands::oui::mac_lookup,
             commands::geoip::geoip_lookup,

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import TopNav from './components/TopNav';
 import NotificationsPanel from './components/NotificationsPanel';
+import ErrorBoundary from './components/ErrorBoundary';
 import PingTab from './features/ping/PingTab';
 import TraceTab from './features/trace/TraceTab';
 import FloodTestTab from './features/flood/FloodTestTab';
@@ -77,25 +78,37 @@ function App() {
       />
       <main className="app-main">
         <div className="app-container">
-          {/* All tabs stay mounted to preserve state; inactive ones are hidden via CSS */}
+          {/* All tabs stay mounted to preserve state; inactive ones are hidden via CSS.
+              Each tab is wrapped in its own ErrorBoundary so a render throw in one
+              (e.g. from an unexpected backend payload shape) can't blank the whole app. */}
           <div className={activeTab !== 'ping' ? 'tab-hidden' : undefined}>
-            <PingTab
-              addNotification={addNotification}
-              settings={settings}
-              saveSettings={saveSettings}
-            />
+            <ErrorBoundary label="Ping">
+              <PingTab
+                addNotification={addNotification}
+                settings={settings}
+                saveSettings={saveSettings}
+              />
+            </ErrorBoundary>
           </div>
           <div className={activeTab !== 'trace' ? 'tab-hidden' : undefined}>
-            <TraceTab addNotification={addNotification} />
+            <ErrorBoundary label="Trace">
+              <TraceTab addNotification={addNotification} />
+            </ErrorBoundary>
           </div>
           <div className={activeTab !== 'packetloss' ? 'tab-hidden' : undefined}>
-            <FloodTestTab addNotification={addNotification} />
+            <ErrorBoundary label="Flood Test">
+              <FloodTestTab addNotification={addNotification} />
+            </ErrorBoundary>
           </div>
           <div className={activeTab !== 'diagnostics' ? 'tab-hidden' : undefined}>
-            <DiagnosticsTab />
+            <ErrorBoundary label="Diagnostics">
+              <DiagnosticsTab />
+            </ErrorBoundary>
           </div>
           <div className={activeTab !== 'recon' ? 'tab-hidden' : undefined}>
-            <ReconTab />
+            <ErrorBoundary label="Recon">
+              <ReconTab />
+            </ErrorBoundary>
           </div>
 
           <footer className="attribution-footer">
