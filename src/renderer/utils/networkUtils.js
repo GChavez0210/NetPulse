@@ -1,6 +1,7 @@
 export const MAX_POINTS = 60;
 export const DOWN_THRESHOLD = 3;
 export const MAX_ACTIVE_SESSIONS = 16;
+export const HEALTH_WINDOW = 100;
 
 export const HEALTH = {
   NORMAL: 'normal',
@@ -12,7 +13,9 @@ export const HEALTH = {
 export function getHealth(test) {
   if (test.reachable === false) return HEALTH.DOWN;
 
-  const lossPct = test.sent > 0 ? ((test.sent - test.received) * 100) / test.sent : 0;
+  const recent = test.recentResults || [];
+  const lossPct =
+    recent.length > 0 ? (recent.filter((ok) => !ok).length * 100) / recent.length : 0;
   if (test.failureStreak > 0 || lossPct > 0) return HEALTH.DEGRADED;
 
   if (test.reachable === true) return HEALTH.NORMAL;
@@ -217,6 +220,7 @@ export function createTest(host) {
     reachable: null,
     failureStreak: 0,
     points: [],
+    recentResults: [],
     sent: 0,
     received: 0,
     lastLatency: null,

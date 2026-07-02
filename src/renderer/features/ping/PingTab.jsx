@@ -9,6 +9,7 @@ import {
   MAX_ACTIVE_SESSIONS,
   DOWN_THRESHOLD,
   MAX_POINTS,
+  HEALTH_WINDOW,
   getHealth,
   getTestMetrics,
   createTest,
@@ -87,6 +88,7 @@ function pingReducer(tests, action) {
         const nextPoints = isSuccess
           ? [...test.points, { ts: Date.now(), latency: result.latency_ms }].slice(-MAX_POINTS)
           : test.points;
+        const nextRecentResults = [...(test.recentResults || []), isSuccess].slice(-HEALTH_WINDOW);
         const nowTs = Date.now();
         const nextEvents = [...test.events];
         if (becameUp) nextEvents.push({ id: `${nowTs}-up`, ts: nowTs, kind: 'up' });
@@ -96,6 +98,7 @@ function pingReducer(tests, action) {
           reachable,
           failureStreak,
           points: nextPoints,
+          recentResults: nextRecentResults,
           events: nextEvents.slice(-20),
           sent: test.sent + 1,
           received: test.received + (isSuccess ? 1 : 0),

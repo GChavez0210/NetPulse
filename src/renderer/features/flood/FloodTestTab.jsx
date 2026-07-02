@@ -276,13 +276,13 @@ export default function FloodTestTab({ addNotification }) {
           <article className="diag-metric">Lost <strong>{rapidDetails.lost}</strong></article>
           <article className="diag-metric">
             Avg RTT{' '}
-            <strong>{rapidDetails.avgLatency != null ? `${rapidDetails.avgLatency} ms` : 'n/a'}</strong>
+            <strong>{rapidDetails.avgLatency != null ? `${rapidDetails.avgLatency.toFixed(2)} ms` : 'n/a'}</strong>
           </article>
           <article className="diag-metric">
             Min/Max RTT{' '}
             <strong>
               {rapidDetails.minRtt != null
-                ? `${rapidDetails.minRtt}/${rapidDetails.maxRtt} ms`
+                ? `${rapidDetails.minRtt.toFixed(2)}/${rapidDetails.maxRtt.toFixed(2)} ms`
                 : 'n/a'}
             </strong>
           </article>
@@ -290,7 +290,9 @@ export default function FloodTestTab({ addNotification }) {
             Jitter/P95{' '}
             <strong>
               {rapidDetails.jitterMs != null
-                ? `${rapidDetails.jitterMs}/${rapidDetails.p95Rtt ?? 'n/a'} ms`
+                ? `${rapidDetails.jitterMs.toFixed(2)}/${
+                    rapidDetails.p95Rtt != null ? rapidDetails.p95Rtt.toFixed(2) : 'n/a'
+                  } ms`
                 : 'n/a'}
             </strong>
           </article>
