@@ -241,8 +241,8 @@ export default function FloodTestTab({ addNotification }) {
   const lossPct = Number(rapidDetails.lossPct || 0);
   const donutBg =
     lossPct === 0
-      ? 'rgba(12,16,28,0.85)'
-      : `conic-gradient(#ff4444 0 ${Math.max(3, lossPct * 3.6)}deg, rgba(12,16,28,0.85) ${Math.max(3, lossPct * 3.6)}deg 360deg)`;
+      ? 'var(--color-bg-control)'
+      : `conic-gradient(var(--color-danger) 0 ${Math.max(3, lossPct * 3.6)}deg, var(--color-bg-control) ${Math.max(3, lossPct * 3.6)}deg 360deg)`;
 
   return (
     <section className="packetloss-page">

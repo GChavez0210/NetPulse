@@ -14,9 +14,9 @@ const INTERVAL_OPTIONS = [
 
 function latencyColor(ms) {
   if (ms == null) return undefined;
-  if (ms <= 50) return 'var(--accent)';
-  if (ms <= 150) return 'var(--warn)';
-  return 'var(--danger)';
+  if (ms <= 50) return 'var(--color-success)';
+  if (ms <= 150) return 'var(--color-warning)';
+  return 'var(--color-danger)';
 }
 
 function healthPill(health) {
@@ -59,12 +59,12 @@ function PingCard({
 
   const hostColor =
     health === 'normal'
-      ? 'var(--accent)'
+      ? 'var(--color-success)'
       : health === 'degraded'
-      ? 'var(--warn)'
+      ? 'var(--color-warning)'
       : health === 'down'
-      ? 'var(--danger)'
-      : 'var(--text)';
+      ? 'var(--color-danger)'
+      : 'var(--color-text-primary)';
 
   useEffect(() => {
     if (editingAlias && aliasInputRef.current) {

@@ -449,7 +449,7 @@ export default function ReconTab() {
           {whoisData ? (
             <div className="diag-result-container">
               <div className="whois-inline-actions" style={{ marginBottom: 6 }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
                   Query: {whoisPresentation.queryDomain}
                 </span>
                 <div style={{ display: 'flex', gap: 6 }}>

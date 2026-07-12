@@ -17,15 +17,15 @@ function LineChart({ points, health, liveLabel, events }) {
   );
 
   const color =
-    health === 'down' ? '#ff4444' : health === 'degraded' ? '#ffaa00' : '#00ff88';
+    health === 'down' ? 'var(--color-danger)' : health === 'degraded' ? 'var(--color-warning)' : 'var(--color-success)';
 
   const CustomTooltip = ({ active, payload }) => {
     if (!active || !payload?.length) return null;
     return (
       <div
         style={{
-          background: 'rgba(12,16,28,0.95)',
-          border: '1px solid rgba(255,255,255,0.08)',
+          background: 'var(--color-bg-elevated)',
+          border: '1px solid var(--color-border)',
           padding: '6px 10px',
           borderRadius: 4,
           fontFamily: 'monospace',
@@ -47,7 +47,7 @@ function LineChart({ points, health, liveLabel, events }) {
           justifyContent: 'center',
           fontFamily: 'monospace',
           fontSize: '0.75rem',
-          color: '#3a4a62'
+          color: 'var(--color-text-muted)'
         }}
       >
         Awaiting data...
@@ -59,18 +59,18 @@ function LineChart({ points, health, liveLabel, events }) {
     <div style={{ height: 100, marginBottom: 8 }}>
       <ResponsiveContainer width="100%" height="100%">
         <ReLineChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -32 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
           <XAxis dataKey="index" hide />
           <YAxis
             domain={['auto', 'auto']}
-            tick={{ fontSize: 10, fontFamily: 'monospace', fill: '#3a4a62' }}
+            tick={{ fontSize: 10, fontFamily: 'monospace', fill: 'var(--color-text-muted)' }}
           />
           <Tooltip content={<CustomTooltip />} />
           {events?.map(ev => (
             <ReferenceLine
               key={ev.id}
               x={data.findIndex(d => d.ts >= ev.ts)}
-              stroke={ev.kind === 'up' ? '#00ff88' : '#ff4444'}
+              stroke={ev.kind === 'up' ? 'var(--color-success)' : 'var(--color-danger)'}
               strokeDasharray="3 3"
             />
           ))}
