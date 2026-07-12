@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and thi
 
 ---
 
+## [0.5.3] — 2026-07-12
+
+Visual redesign and tray support — no changes to diagnostic behavior.
+
+### Added
+- **Tray:** The app now integrates with the system tray (Show NetPulse / Exit). Closing the window hides it to the tray instead of exiting.
+
+### Changed
+- **Theme:** Replaced the green/cyan glass theme with a flat, professional dark theme built around a new orange accent (`#F45A16`), matching the new application icon. Status colors (success/warning/danger) are now distinct from the brand accent instead of overloading it.
+- **Icons:** Updated the bundled app icon (Windows `.ico`, macOS `.icns`, and generated PNG sizes) to the new NetPulse mark.
+- **Buttons/tabs:** Disabled native button/tab appearance and gave hovered (non-active) nav tabs a solid background, fixing a low-contrast hover state where OS control theming could bleed through.
+
+---
+
 ## [0.5.2] — 2026-07-02
 
 Security, stability, and efficiency audit — no new user-facing features.
