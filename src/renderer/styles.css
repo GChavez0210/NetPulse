@@ -205,6 +205,8 @@ label {
 }
 
 .nav-tab {
+  appearance: none;
+  -webkit-appearance: none;
   font-family: var(--font-mono);
   text-transform: uppercase;
   font-size: 0.72rem;
@@ -212,7 +214,7 @@ label {
   color: var(--color-text-secondary);
   padding: 0 16px;
   height: 52px;
-  background: transparent;
+  background: var(--color-bg-secondary);
   border: none;
   border-bottom: 2px solid transparent;
   border-radius: 0;
@@ -231,8 +233,14 @@ label {
 
 .nav-tab:hover:not(.active) {
   color: var(--color-text-primary);
+  background: var(--color-bg-hover);
   border-bottom-color: var(--color-border-strong);
-  background: transparent;
+}
+
+.nav-tab.active:hover {
+  color: var(--color-accent-hover);
+  background: var(--color-accent-subtle);
+  border-bottom-color: var(--color-accent-hover);
 }
 
 .nav-utilities {
@@ -323,6 +331,8 @@ select option {
 
 /* ── Buttons ── */
 button {
+  appearance: none;
+  -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
