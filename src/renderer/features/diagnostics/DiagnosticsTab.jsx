@@ -248,6 +248,9 @@ export default function DiagnosticsTab() {
         {/* TCP Ping */}
         <article className="diag-card">
           <h3>TCP Ping (SYN Reachability)</h3>
+          <p className="diag-card-desc">
+            Checks if a specific TCP port is open and reachable.
+          </p>
           <div className="diag-controls">
             <input
               value={tcpHostInput}
@@ -276,6 +279,9 @@ export default function DiagnosticsTab() {
         {/* MTR */}
         <article className="diag-card">
           <h3>MTR-style (Ping + Trace)</h3>
+          <p className="diag-card-desc">
+            Combines ping and traceroute to show per-hop loss and latency.
+          </p>
           <div className="diag-controls">
             <input
               value={mtrHostInput}
@@ -304,6 +310,9 @@ export default function DiagnosticsTab() {
         {/* DNS Toolkit */}
         <article className="diag-card">
           <h3>DNS Toolkit</h3>
+          <p className="diag-card-desc">
+            Resolves a domain's records via the local resolver and Google DNS.
+          </p>
           <div className="diag-controls">
             <input
               value={dnsHostInput}
@@ -333,6 +342,9 @@ export default function DiagnosticsTab() {
         {/* Port Scanner */}
         <article className="diag-card">
           <h3>Port Scanner Lite</h3>
+          <p className="diag-card-desc">
+            Sweeps a custom list of ports on a host to see which are open.
+          </p>
           <div className="diag-controls">
             <input
               value={portScanHostInput}
@@ -358,6 +370,9 @@ export default function DiagnosticsTab() {
         {/* DNS Validation */}
         <article className="diag-card">
           <h3>DNS Validation</h3>
+          <p className="diag-card-desc">
+            Checks a domain's DNS setup for common misconfigurations.
+          </p>
           <div className="diag-controls">
             <input
               value={dnsValInput}
@@ -386,6 +401,9 @@ export default function DiagnosticsTab() {
         {/* Multi-Resolver Health */}
         <article className="diag-card">
           <h3>Multi-Resolver Health (Split DNS)</h3>
+          <p className="diag-card-desc">
+            Compares answers across resolvers to catch split-DNS or poisoning issues.
+          </p>
           <div className="diag-controls">
             <input
               value={dnsHealthInput}
@@ -414,6 +432,9 @@ export default function DiagnosticsTab() {
         {/* DNSBL Check */}
         <article className="diag-card">
           <h3>DNSBL Blacklist Check</h3>
+          <p className="diag-card-desc">
+            Checks an IPv4 address against public DNS-based blacklists.
+          </p>
           <div className="diag-controls">
             <input
               value={dnsblInput}
