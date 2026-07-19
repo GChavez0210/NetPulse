@@ -127,6 +127,7 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
   const [dontFragment, setDontFragment] = useState(false);
   const [status, setStatus] = useState('Ready.');
   const [showFavorites, setShowFavorites] = useState(false);
+  const [netStatus, setNetStatus] = useState('checking'); // 'checking' | 'online' | 'offline'
 
   const audioEnabled = settings?.audio_alerts ?? true;
   const favorites = settings?.ping_favorites ?? [];
@@ -151,6 +152,26 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
       for (const timer of timersRef.current.values()) clearInterval(timer);
       timersRef.current.clear();
       inFlightRef.current.clear();
+    };
+  }, []);
+
+  // Quick reachability check against 8.8.8.8, used to show whether the app
+  // has an internet path at all — independent of any user-configured targets.
+  useEffect(() => {
+    let cancelled = false;
+    const checkConnectivity = async () => {
+      try {
+        const result = await invoke('ping_sample', { host: '8.8.8.8' });
+        if (!cancelled) setNetStatus(result.ok ? 'online' : 'offline');
+      } catch {
+        if (!cancelled) setNetStatus('offline');
+      }
+    };
+    checkConnectivity();
+    const interval = setInterval(checkConnectivity, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
     };
   }, []);
 
@@ -418,9 +439,11 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
       {/* Page Header */}
       <div className="page-header">
         <div className="page-title-block">
-          <span className="page-tag">
+          <span className={`page-tag page-tag--${netStatus}`}>
             <span className="page-tag-dot" />
-            MONITOR ACTIVE
+            {netStatus === 'online' && 'ALL SYSTEMS READY'}
+            {netStatus === 'offline' && 'NO INTERNET CONNECTION'}
+            {netStatus === 'checking' && 'CHECKING CONNECTIVITY'}
           </span>
           <h1>Multi-Target Ping</h1>
         </div>

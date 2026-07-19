@@ -497,6 +497,27 @@ button.danger:disabled:hover {
   animation: pulse-dot 2s ease-in-out infinite;
 }
 
+.page-tag--online {
+  color: var(--color-success);
+}
+.page-tag--online .page-tag-dot {
+  background: var(--color-success);
+}
+
+.page-tag--offline {
+  color: var(--color-danger);
+}
+.page-tag--offline .page-tag-dot {
+  background: var(--color-danger);
+}
+
+.page-tag--checking {
+  color: var(--color-warning);
+}
+.page-tag--checking .page-tag-dot {
+  background: var(--color-warning);
+}
+
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.2; }

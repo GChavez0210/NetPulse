@@ -35,6 +35,16 @@ export default function ReconTab() {
   const [whoisData, setWhoisData] = useState(null);
   const [whoisLoading, setWhoisLoading] = useState(false);
 
+  // ASN / Network Lookup
+  const [asnInput, setAsnInput] = useState('');
+  const [asnLoading, setAsnLoading] = useState(false);
+  const [asnResult, setAsnResult] = useState(null);
+
+  // BGP Looking Glass
+  const [lgInput, setLgInput] = useState('');
+  const [lgLoading, setLgLoading] = useState(false);
+  const [lgResult, setLgResult] = useState(null);
+
   const [status, setStatus] = useState('Ready.');
 
   const whoisPresentation = useMemo(
@@ -174,6 +184,44 @@ export default function ReconTab() {
     }
   };
 
+  const handleAsnLookup = async () => {
+    const ip = asnInput.trim();
+    if (!ip) { setStatus('Enter an IPv4 or IPv6 address.'); return; }
+    setAsnLoading(true);
+    setAsnResult(null);
+    setStatus(`Looking up announcing ASN for ${ip}...`);
+    try {
+      const res = await invoke('asn_lookup', { query: ip });
+      setAsnResult(res);
+      setStatus(res.ok ? `ASN lookup complete: AS${res.asn}.` : (res.error || 'ASN lookup failed.'));
+      if (res.ok) setAsnInput('');
+    } catch (e) {
+      setAsnResult({ ok: false, error: String(e?.message || e) });
+      setStatus('ASN lookup error.');
+    } finally {
+      setAsnLoading(false);
+    }
+  };
+
+  const handleLookingGlass = async () => {
+    const resource = lgInput.trim();
+    if (!resource) { setStatus('Enter an IP address or CIDR prefix.'); return; }
+    setLgLoading(true);
+    setLgResult(null);
+    setStatus(`Querying BGP looking glass for ${resource}...`);
+    try {
+      const res = await invoke('bgp_looking_glass', { resource });
+      setLgResult(res);
+      setStatus(res.ok ? `Looking glass complete: seen by ${res.peer_count} peer(s).` : (res.error || 'Looking glass failed.'));
+      if (res.ok) setLgInput('');
+    } catch (e) {
+      setLgResult({ ok: false, error: String(e?.message || e) });
+      setStatus('Looking glass error.');
+    } finally {
+      setLgLoading(false);
+    }
+  };
+
   const handleCopyWhois = async () => {
     if (!whoisData) return;
     try {
@@ -216,6 +264,173 @@ export default function ReconTab() {
       </div>
 
       <div className="diagnostics-grid">
+
+        {/* ── WHOIS Lookup ─────────────────────────────────────────────────── */}
+        <article className="diag-card">
+          <h3>WHOIS Lookup</h3>
+          <p className="diag-card-desc">
+            Registry ownership and RDAP details for a hostname or IP.
+          </p>
+          <div className="diag-controls">
+            <input
+              value={whoisInput}
+              onChange={(e) => setWhoisInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleWhoisLookup)}
+              placeholder="hostname or IP"
+            />
+          </div>
+          <button className="diag-run-btn" onClick={handleWhoisLookup} disabled={whoisLoading}>
+            {whoisLoading ? 'Running...' : 'WHOIS Lookup'}
+          </button>
+
+          {whoisData ? (
+            <div className="diag-result-container">
+              <div className="whois-inline-actions" style={{ marginBottom: 6 }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  Query: {whoisPresentation.queryDomain}
+                </span>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="copy-sm-btn secondary" onClick={handleCopyWhois}>Copy</button>
+                  <button className="copy-sm-btn secondary" onClick={handleExportWhoisTxt}>Export</button>
+                </div>
+              </div>
+              <pre className="diag-log-pre" style={{ fontSize: '0.78rem' }}>
+                {whoisPresentation.lines && whoisPresentation.lines.length > 0
+                  ? whoisPresentation.lines.map((line, i) => {
+                      if (line.type === 'blank') return <div key={i}>&nbsp;</div>;
+                      if (line.type === 'comment') return <div key={i} className="whois-comment">{line.value}</div>;
+                      if (line.type === 'section') return <div key={i} className="whois-section">{line.value}</div>;
+                      return (
+                        <div key={i}>
+                          <span className="whois-label">{line.label}:</span>{' '}
+                          <span className="whois-value">{line.value}</span>
+                        </div>
+                      );
+                    })
+                  : <div className="whois-value">{whoisPresentation.text}</div>}
+              </pre>
+            </div>
+          ) : (
+            <pre className="diag-log-pre">No WHOIS result yet.</pre>
+          )}
+        </article>
+
+        {/* ── ASN / Network Lookup ─────────────────────────────────────────── */}
+        <article className="diag-card">
+          <h3>ASN / Network Lookup</h3>
+          <p className="diag-card-desc">
+            Who is currently announcing this IP on the internet — ASN, BGP prefix, and origin network.
+          </p>
+          <div className="diag-controls">
+            <input
+              value={asnInput}
+              onChange={(e) => setAsnInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleAsnLookup)}
+              placeholder="IPv4 or IPv6 address"
+            />
+          </div>
+          <button className="diag-run-btn" onClick={handleAsnLookup} disabled={asnLoading}>
+            {asnLoading ? 'Looking up...' : 'Lookup ASN'}
+          </button>
+
+          {asnResult ? (
+            <div className="diag-result-container">
+              {asnResult.ok && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <span className="pill-stable">AS{asnResult.asn}</span>
+                  {asnResult.country_code && <span className="pill-jitter">{asnResult.country_code}</span>}
+                </div>
+              )}
+              <pre className="diag-log-pre">
+                {asnResult.raw_output || (asnResult.error ? `Error: ${asnResult.error}` : '')}
+              </pre>
+              {asnResult.raw_output && (
+                <button className="copy-sm-btn secondary" onClick={() => copyText(asnResult.raw_output)}>
+                  Copy
+                </button>
+              )}
+            </div>
+          ) : (
+            <pre className="diag-log-pre">No ASN result yet.</pre>
+          )}
+        </article>
+
+        {/* ── BGP Looking Glass ────────────────────────────────────────────── */}
+        <article className="diag-card">
+          <h3>BGP Looking Glass</h3>
+          <p className="diag-card-desc">
+            Real-time route visibility from RIPE RIS route collectors — confirms propagation and flags conflicting origins.
+          </p>
+          <div className="diag-controls">
+            <input
+              value={lgInput}
+              onChange={(e) => setLgInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleLookingGlass)}
+              placeholder="IP address or CIDR prefix"
+            />
+          </div>
+          <button className="diag-run-btn" onClick={handleLookingGlass} disabled={lgLoading}>
+            {lgLoading ? 'Querying...' : 'Query Looking Glass'}
+          </button>
+
+          {lgResult ? (
+            <div className="diag-result-container">
+              {lgResult.ok && lgResult.peer_count > 0 && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <span className="pill-stable">{lgResult.peer_count} peers</span>
+                  <span
+                    className={lgResult.distinct_origins.length > 1 ? 'pill-timeout' : 'pill-jitter'}
+                  >
+                    {lgResult.distinct_origins.length > 1
+                      ? `${lgResult.distinct_origins.length} conflicting origins`
+                      : `AS${lgResult.distinct_origins[0]}`}
+                  </span>
+                </div>
+              )}
+              <pre className="diag-log-pre">
+                {lgResult.raw_output || (lgResult.error ? `Error: ${lgResult.error}` : '')}
+              </pre>
+              {lgResult.raw_output && (
+                <button className="copy-sm-btn secondary" onClick={() => copyText(lgResult.raw_output)}>
+                  Copy
+                </button>
+              )}
+            </div>
+          ) : (
+            <pre className="diag-log-pre">No looking glass result yet.</pre>
+          )}
+        </article>
+
+        {/* ── DMARC Inspector ─────────────────────────────────────────────── */}
+        <article className="diag-card">
+          <h3>DMARC Inspector</h3>
+          <p className="diag-card-desc">
+            Validates DMARC policy tags for a domain.
+          </p>
+          <div className="diag-controls">
+            <input
+              value={dmarcInput}
+              onChange={(e) => setDmarcInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handleDmarcValidate)}
+              placeholder="Enter a domain"
+            />
+          </div>
+          <button className="diag-run-btn" onClick={handleDmarcValidate} disabled={dmarcLoading}>
+            {dmarcLoading ? 'Inspecting...' : 'Inspect Records'}
+          </button>
+          <div className="diag-result-container">
+            <pre className="diag-log-pre">
+              {dmarcResult
+                ? dmarcResult.raw_output || JSON.stringify(dmarcResult, null, 2)
+                : 'No DMARC validation result yet.'}
+            </pre>
+            {dmarcResult?.rawOutput && (
+              <button className="copy-sm-btn secondary" onClick={() => copyText(dmarcResult.raw_output)}>
+                Copy
+              </button>
+            )}
+          </div>
+        </article>
 
         {/* ── SSL / TLS Inspector ─────────────────────────────────────────── */}
         <article className="diag-card">
@@ -389,92 +604,11 @@ export default function ReconTab() {
           {macResult ? (
             <pre className="diag-log-pre">
               {macResult.ok
-                ? (macResult.raw_output || macResult.rawOutput)
+                ? macResult.raw_output
                 : `Error: ${macResult.error || 'Unknown error'}`}
             </pre>
           ) : (
             <pre className="diag-log-pre">No result yet.</pre>
-          )}
-        </article>
-
-        {/* ── DMARC Inspector ─────────────────────────────────────────────── */}
-        <article className="diag-card">
-          <h3>DMARC Inspector</h3>
-          <p className="diag-card-desc">
-            Validates DMARC policy tags for a domain.
-          </p>
-          <div className="diag-controls">
-            <input
-              value={dmarcInput}
-              onChange={(e) => setDmarcInput(e.target.value)}
-              onKeyDown={(e) => runOnEnter(e, handleDmarcValidate)}
-              placeholder="Enter a domain"
-            />
-          </div>
-          <button className="diag-run-btn" onClick={handleDmarcValidate} disabled={dmarcLoading}>
-            {dmarcLoading ? 'Inspecting...' : 'Inspect Records'}
-          </button>
-          <div className="diag-result-container">
-            <pre className="diag-log-pre">
-              {dmarcResult
-                ? dmarcResult.rawOutput || JSON.stringify(dmarcResult, null, 2)
-                : 'No DMARC validation result yet.'}
-            </pre>
-            {dmarcResult?.rawOutput && (
-              <button className="copy-sm-btn secondary" onClick={() => copyText(dmarcResult.rawOutput)}>
-                Copy
-              </button>
-            )}
-          </div>
-        </article>
-
-        {/* ── WHOIS Lookup ─────────────────────────────────────────────────── */}
-        <article className="diag-card">
-          <h3>WHOIS Lookup</h3>
-          <p className="diag-card-desc">
-            Registry ownership and RDAP details for a hostname or IP.
-          </p>
-          <div className="diag-controls">
-            <input
-              value={whoisInput}
-              onChange={(e) => setWhoisInput(e.target.value)}
-              onKeyDown={(e) => runOnEnter(e, handleWhoisLookup)}
-              placeholder="hostname or IP"
-            />
-          </div>
-          <button className="diag-run-btn" onClick={handleWhoisLookup} disabled={whoisLoading}>
-            {whoisLoading ? 'Running...' : 'WHOIS Lookup'}
-          </button>
-
-          {whoisData ? (
-            <div className="diag-result-container">
-              <div className="whois-inline-actions" style={{ marginBottom: 6 }}>
-                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                  Query: {whoisPresentation.queryDomain}
-                </span>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button className="copy-sm-btn secondary" onClick={handleCopyWhois}>Copy</button>
-                  <button className="copy-sm-btn secondary" onClick={handleExportWhoisTxt}>Export</button>
-                </div>
-              </div>
-              <pre className="diag-log-pre" style={{ fontSize: '0.78rem' }}>
-                {whoisPresentation.lines && whoisPresentation.lines.length > 0
-                  ? whoisPresentation.lines.map((line, i) => {
-                      if (line.type === 'blank') return <div key={i}>&nbsp;</div>;
-                      if (line.type === 'comment') return <div key={i} className="whois-comment">{line.value}</div>;
-                      if (line.type === 'section') return <div key={i} className="whois-section">{line.value}</div>;
-                      return (
-                        <div key={i}>
-                          <span className="whois-label">{line.label}:</span>{' '}
-                          <span className="whois-value">{line.value}</span>
-                        </div>
-                      );
-                    })
-                  : <div className="whois-value">{whoisPresentation.text}</div>}
-              </pre>
-            </div>
-          ) : (
-            <pre className="diag-log-pre">No WHOIS result yet.</pre>
           )}
         </article>
 

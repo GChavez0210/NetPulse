@@ -24,7 +24,7 @@ fn is_ipv6(s: &str) -> bool {
 }
 
 /// Perform a raw TCP WHOIS query against host:43.
-async fn raw_tcp_whois(server: &str, query: &str) -> Result<String, String> {
+pub(crate) async fn raw_tcp_whois(server: &str, query: &str) -> Result<String, String> {
     let addr = format!("{server}:43");
     let mut stream = tokio::time::timeout(
         Duration::from_secs(5),

@@ -73,12 +73,6 @@ async fn probe_port(host: &str, port: u16, timeout_ms: u64) -> TcpPingResult {
 }
 
 #[tauri::command]
-pub async fn tcp_ping(host: String, port: u16, timeout_ms: u64) -> Result<TcpPingResult, String> {
-    validate_host(&host)?;
-    Ok(probe_port(&host, port, timeout_ms).await)
-}
-
-#[tauri::command]
 pub async fn port_scan(
     host: String,
     ports: Vec<u16>,

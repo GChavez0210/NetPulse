@@ -1,20 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { runOnEnter } from '../trace/TraceTab';
 import { parseIntOrDefault } from '../../utils/networkUtils';
 
 export default function DiagnosticsTab() {
-  // TCP Ping
-  const [tcpHostInput, setTcpHostInput] = useState('');
-  const [tcpPort, setTcpPort] = useState(443);
-  const [tcpResult, setTcpResult] = useState(null);
-  const [tcpLoading, setTcpLoading] = useState(false);
-
   // MTR
   const [mtrHostInput, setMtrHostInput] = useState('');
   const [mtrRounds, setMtrRounds] = useState(5);
   const [mtrLoading, setMtrLoading] = useState(false);
   const [mtrResult, setMtrResult] = useState(null);
+
+  // Speed Test
+  const [speedLoading, setSpeedLoading] = useState(false);
+  const [speedResult, setSpeedResult] = useState(null);
+  const [speedElapsed, setSpeedElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!speedLoading) return undefined;
+    setSpeedElapsed(0);
+    const interval = setInterval(() => setSpeedElapsed((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [speedLoading]);
 
   // DNS Toolkit
   const [dnsHostInput, setDnsHostInput] = useState('');
@@ -22,9 +28,9 @@ export default function DiagnosticsTab() {
   const [dnsResult, setDnsResult] = useState(null);
   const [dnsLoading, setDnsLoading] = useState(false);
 
-  // Port Scanner
+  // Port Checker (single quick check or multi-port sweep)
   const [portScanHostInput, setPortScanHostInput] = useState('');
-  const [portListInput, setPortListInput] = useState('22,80,443,3389');
+  const [portListInput, setPortListInput] = useState('443');
   const [portScanResult, setPortScanResult] = useState(null);
   const [portScanLoading, setPortScanLoading] = useState(false);
 
@@ -47,26 +53,6 @@ export default function DiagnosticsTab() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  const handleTcpPing = async () => {
-    if (tcpLoading) return;
-    const host = tcpHostInput.trim();
-    if (!host) { setStatus('Enter a hostname or IP for TCP ping.'); return; }
-    setTcpLoading(true);
-    setStatus(`Pinging TCP port ${tcpPort} on ${host}...`);
-    setTcpResult(null);
-    try {
-      const result = await invoke('tcp_ping', { host, port: tcpPort, timeoutMs: 1500 });
-      setTcpResult(result);
-      setStatus(`TCP ping to ${host}:${tcpPort} complete.`);
-      setTcpHostInput('');
-    } catch (error) {
-      setTcpResult({ error: String(error?.message || error) });
-      setStatus('TCP ping failed.');
-    } finally {
-      setTcpLoading(false);
-    }
-  };
-
   const handleMtrRun = async () => {
     if (mtrLoading) return;
     const host = mtrHostInput.trim();
@@ -84,6 +70,27 @@ export default function DiagnosticsTab() {
       setStatus('MTR diagnostic failed.');
     } finally {
       setMtrLoading(false);
+    }
+  };
+
+  const handleSpeedTest = async () => {
+    if (speedLoading) return;
+    setSpeedLoading(true);
+    setSpeedResult(null);
+    setStatus('Running speed test (download then upload)...');
+    try {
+      const result = await invoke('speed_test');
+      setSpeedResult(result);
+      setStatus(
+        result.ok
+          ? `Speed test complete: ${result.download_mbps?.toFixed(1)} Mbps down / ${result.upload_mbps?.toFixed(1) ?? '-'} Mbps up.`
+          : result.error || 'Speed test failed.'
+      );
+    } catch (error) {
+      setSpeedResult({ ok: false, error: String(error?.message || error) });
+      setStatus('Speed test failed.');
+    } finally {
+      setSpeedLoading(false);
     }
   };
 
@@ -118,12 +125,16 @@ export default function DiagnosticsTab() {
       .slice(0, 32);
     if (ports.length === 0) { setStatus('Enter at least one valid port.'); return; }
     setPortScanLoading(true);
-    setStatus(`Scanning ${ports.length} ports on ${host}...`);
+    setStatus(
+      ports.length === 1
+        ? `Checking port ${ports[0]} on ${host}...`
+        : `Scanning ${ports.length} ports on ${host}...`
+    );
     setPortScanResult(null);
     try {
       const result = await invoke('port_scan', { host, ports, timeoutMs: 900 });
       setPortScanResult(result);
-      setStatus(`Port scan complete on ${host}.`);
+      setStatus(ports.length === 1 ? `Port check complete on ${host}.` : `Port scan complete on ${host}.`);
       setPortScanHostInput('');
     } catch (error) {
       setPortScanResult({ error: String(error?.message || error) });
@@ -231,6 +242,60 @@ export default function DiagnosticsTab() {
     return lines.join('\n');
   };
 
+  const formatPortScanResult = (result) => {
+    if (!result) return 'No port check result yet.';
+    if (result.error && !result.ports) return `Error: ${result.error}`;
+    const lines = [];
+    lines.push(`Host: ${result.host}`);
+
+    // Single port: show a compact reachability summary instead of a table.
+    if (result.ports.length === 1) {
+      const p = result.ports[0];
+      lines.push(`Port:   ${p.port}`);
+      lines.push(`Status: ${p.status.toUpperCase()}`);
+      lines.push(`RTT:    ${p.rtt_ms != null ? `${p.rtt_ms.toFixed(1)} ms` : '-'}`);
+      return lines.join('\n');
+    }
+
+    lines.push(`Scanned ${result.ports.length} port(s):`);
+    lines.push('');
+    const portW = Math.max(4, ...result.ports.map((p) => String(p.port).length));
+    const statusW = Math.max(6, ...result.ports.map((p) => p.status.length));
+    lines.push(`  ${'PORT'.padEnd(portW)}  ${'STATUS'.padEnd(statusW)}  RTT`);
+    result.ports.forEach((p) => {
+      const rtt = p.rtt_ms != null ? `${p.rtt_ms.toFixed(1)} ms` : '-';
+      lines.push(`  ${String(p.port).padEnd(portW)}  ${p.status.padEnd(statusW)}  ${rtt}`);
+    });
+    const open = result.ports.filter((p) => p.status === 'open').map((p) => p.port);
+    lines.push('');
+    lines.push(open.length ? `Open ports: ${open.join(', ')}` : 'Open ports: none');
+    return lines.join('\n');
+  };
+
+  const formatMtrResult = (result) => {
+    if (!result) return 'No MTR result yet.';
+    if (result.error && !result.hops) return `Error: ${result.error}`;
+    if (!result.hops?.length) return 'No hops recorded (target may be unreachable or trace timed out).';
+    const lines = [];
+    lines.push(`Host:   ${result.host}`);
+    lines.push(`Rounds: ${result.rounds}`);
+    lines.push('');
+    const ipW = Math.max(15, ...result.hops.map((h) => h.ip.length));
+    lines.push(`  ${'HOP'.padEnd(4)}${'IP'.padEnd(ipW)}  ${'LOSS%'.padEnd(7)}${'AVG'.padEnd(9)}${'BEST'.padEnd(9)}WORST`);
+    result.hops.forEach((h) => {
+      const fmt = (v) => (v != null ? `${v.toFixed(1)}ms` : '-');
+      lines.push(
+        `  ${String(h.hop).padEnd(4)}${h.ip.padEnd(ipW)}  ${`${h.loss_pct.toFixed(0)}%`.padEnd(7)}${fmt(h.avg_rtt).padEnd(9)}${fmt(h.best_rtt).padEnd(9)}${fmt(h.worst_rtt)}`
+      );
+    });
+    if (result.worst_hop != null) {
+      const worst = result.hops.find((h) => h.hop === result.worst_hop);
+      lines.push('');
+      lines.push(`Worst hop: #${result.worst_hop}${worst ? ` (${worst.ip})` : ''}`);
+    }
+    return lines.join('\n');
+  };
+
   return (
     <section className="diagnostics-hub">
       <div className="page-header">
@@ -245,34 +310,31 @@ export default function DiagnosticsTab() {
 
       <div className="diagnostics-grid">
 
-        {/* TCP Ping */}
+        {/* Port Checker */}
         <article className="diag-card">
-          <h3>TCP Ping (SYN Reachability)</h3>
+          <h3>Port Checker</h3>
           <p className="diag-card-desc">
-            Checks if a specific TCP port is open and reachable.
+            Checks TCP port reachability on a host — enter one port for a quick check, or a list to sweep multiple.
           </p>
           <div className="diag-controls">
             <input
-              value={tcpHostInput}
-              onChange={(e) => setTcpHostInput(e.target.value)}
-              onKeyDown={(e) => runOnEnter(e, handleTcpPing)}
+              value={portScanHostInput}
+              onChange={(e) => setPortScanHostInput(e.target.value)}
+              onKeyDown={(e) => runOnEnter(e, handlePortScan)}
               placeholder="Enter a hostname"
             />
             <input
-              type="number"
-              min="1"
-              max="65535"
-              value={tcpPort}
-              onChange={(e) => setTcpPort(parseIntOrDefault(e.target.value, 443, 1, 65535))}
-              placeholder="443"
-              style={{ width: 90, flex: '0 0 90px' }}
+              value={portListInput}
+              onChange={(e) => setPortListInput(e.target.value)}
+              placeholder="443 or 80,443,3389"
+              style={{ width: 120, flex: '0 0 120px' }}
             />
           </div>
-          <button className="diag-run-btn" onClick={handleTcpPing} disabled={tcpLoading}>
-            {tcpLoading ? 'Pinging...' : 'Run TCP Ping'}
+          <button className="diag-run-btn" onClick={handlePortScan} disabled={portScanLoading}>
+            {portScanLoading ? 'Checking...' : 'Check Port(s)'}
           </button>
           <pre className="diag-log-pre">
-            {tcpResult ? JSON.stringify(tcpResult, null, 2) : 'No TCP ping result yet.'}
+            {formatPortScanResult(portScanResult)}
           </pre>
         </article>
 
@@ -303,8 +365,47 @@ export default function DiagnosticsTab() {
             {mtrLoading ? 'Running...' : 'Run MTR-style'}
           </button>
           <pre className="diag-log-pre">
-            {mtrResult ? JSON.stringify(mtrResult, null, 2) : 'No MTR result yet.'}
+            {formatMtrResult(mtrResult)}
           </pre>
+        </article>
+
+        {/* Speed Test */}
+        <article className="diag-card">
+          <h3>Speed Test</h3>
+          <p className="diag-card-desc">
+            Download/upload throughput and latency against Cloudflare's public speed-test backend.
+          </p>
+          <button className="diag-run-btn" onClick={handleSpeedTest} disabled={speedLoading}>
+            {speedLoading ? 'Testing...' : 'Run Speed Test'}
+          </button>
+
+          {speedLoading && (
+            <span className="page-tag" style={{ marginTop: 8 }}>
+              <span className="page-tag-dot" />
+              {speedElapsed < 8 ? 'TESTING DOWNLOAD' : 'TESTING UPLOAD'} — {speedElapsed}s
+            </span>
+          )}
+
+          {speedResult ? (
+            <div className="diag-result-container">
+              {speedResult.ok && (
+                <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+                  <span className="pill-stable">↓ {speedResult.download_mbps?.toFixed(1)} Mbps</span>
+                  {speedResult.upload_mbps != null && (
+                    <span className="pill-stable">↑ {speedResult.upload_mbps.toFixed(1)} Mbps</span>
+                  )}
+                  {speedResult.latency_ms != null && (
+                    <span className="pill-jitter">{speedResult.latency_ms.toFixed(0)} ms</span>
+                  )}
+                </div>
+              )}
+              <pre className="diag-log-pre">
+                {speedResult.raw_output || (speedResult.error ? `Error: ${speedResult.error}` : '')}
+              </pre>
+            </div>
+          ) : (
+            <pre className="diag-log-pre">No speed test result yet.</pre>
+          )}
         </article>
 
         {/* DNS Toolkit */}
@@ -339,34 +440,6 @@ export default function DiagnosticsTab() {
           <pre className="diag-log-pre">{formatDnsResult(dnsResult)}</pre>
         </article>
 
-        {/* Port Scanner */}
-        <article className="diag-card">
-          <h3>Port Scanner Lite</h3>
-          <p className="diag-card-desc">
-            Sweeps a custom list of ports on a host to see which are open.
-          </p>
-          <div className="diag-controls">
-            <input
-              value={portScanHostInput}
-              onChange={(e) => setPortScanHostInput(e.target.value)}
-              onKeyDown={(e) => runOnEnter(e, handlePortScan)}
-              placeholder="Enter a hostname"
-            />
-            <input
-              value={portListInput}
-              onChange={(e) => setPortListInput(e.target.value)}
-              placeholder="80,443,3389"
-              style={{ width: 120, flex: '0 0 120px' }}
-            />
-          </div>
-          <button className="diag-run-btn" onClick={handlePortScan} disabled={portScanLoading}>
-            {portScanLoading ? 'Scanning...' : 'Run Port Scan'}
-          </button>
-          <pre className="diag-log-pre">
-            {portScanResult ? JSON.stringify(portScanResult, null, 2) : 'No port scan result yet.'}
-          </pre>
-        </article>
-
         {/* DNS Validation */}
         <article className="diag-card">
           <h3>DNS Validation</h3>
@@ -387,11 +460,11 @@ export default function DiagnosticsTab() {
           <div className="diag-result-container">
             <pre className="diag-log-pre">
               {dnsValResult
-                ? dnsValResult.rawOutput || JSON.stringify(dnsValResult, null, 2)
+                ? dnsValResult.raw_output || JSON.stringify(dnsValResult, null, 2)
                 : 'No DNS Validation result yet.'}
             </pre>
             {dnsValResult?.rawOutput && (
-              <button className="copy-sm-btn secondary" onClick={() => handleCopyRaw(dnsValResult.rawOutput)}>
+              <button className="copy-sm-btn secondary" onClick={() => handleCopyRaw(dnsValResult.raw_output)}>
                 Copy
               </button>
             )}
@@ -418,11 +491,11 @@ export default function DiagnosticsTab() {
           <div className="diag-result-container">
             <pre className="diag-log-pre">
               {dnsHealthResult
-                ? dnsHealthResult.rawOutput || JSON.stringify(dnsHealthResult, null, 2)
+                ? dnsHealthResult.raw_output || JSON.stringify(dnsHealthResult, null, 2)
                 : 'No Multi-Resolver result yet.'}
             </pre>
             {dnsHealthResult?.rawOutput && (
-              <button className="copy-sm-btn secondary" onClick={() => handleCopyRaw(dnsHealthResult.rawOutput)}>
+              <button className="copy-sm-btn secondary" onClick={() => handleCopyRaw(dnsHealthResult.raw_output)}>
                 Copy
               </button>
             )}
@@ -449,11 +522,11 @@ export default function DiagnosticsTab() {
           <div className="diag-result-container">
             <pre className="diag-log-pre">
               {dnsblResult
-                ? dnsblResult.rawOutput || dnsblResult.error || JSON.stringify(dnsblResult, null, 2)
+                ? dnsblResult.raw_output || dnsblResult.error || JSON.stringify(dnsblResult, null, 2)
                 : 'No DNSBL check result yet.'}
             </pre>
             {dnsblResult?.rawOutput && (
-              <button className="copy-sm-btn secondary" onClick={() => handleCopyRaw(dnsblResult.rawOutput)}>
+              <button className="copy-sm-btn secondary" onClick={() => handleCopyRaw(dnsblResult.raw_output)}>
                 Copy
               </button>
             )}

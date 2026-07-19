@@ -1,3 +1,5 @@
+pub mod asn;
+pub mod bgp;
 pub mod dns;
 pub mod dnsbl;
 pub mod flood;
@@ -5,6 +7,7 @@ pub mod geoip;
 pub mod oui;
 pub mod ping;
 pub mod settings;
+pub mod speed;
 pub mod tcp;
 pub mod trace;
 pub mod recon;
