@@ -5,6 +5,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and thi
 
 ---
 
+## [0.5.4] — 2026-07-18
+
+New ISP-oriented diagnostics tools, a reorganized Diagnostics/Recon layout, and a real-data bug fix.
+
+### Added
+- **ASN / Network Lookup (Recon):** Looks up the ASN, AS name, BGP prefix, country, and registry currently announcing a given IP via Team Cymru's whois service — real-time BGP data, not just registry records.
+- **BGP Looking Glass (Recon):** Queries RIPE RIS route-collector visibility for an IP/prefix via RIPEstat, showing how many peers see it and flagging conflicting origin ASNs (a route-leak/hijack signal).
+- **Speed Test (Diagnostics):** Download/upload throughput and latency test against Cloudflare's public speed-test backend, using multiple parallel streams per phase so results hold up on faster links. Shows a live "testing download/upload" indicator with elapsed time while running.
+- **Internet-reachability indicator (Ping tab):** The page header now polls `8.8.8.8` every 15s and shows ALL SYSTEMS READY / NO INTERNET CONNECTION / CHECKING CONNECTIVITY, replacing the static "MONITOR ACTIVE" label.
+- **Single-instance enforcement:** Launching a second instance now focuses and restores the existing window instead of opening a duplicate process.
+- Short descriptions on each Diagnostics tool card explaining what it checks.
+
+### Changed
+- **Diagnostics and Recon tabs reordered** by logical workflow: Diagnostics groups connectivity checks → DNS tools → reputation checks; Recon leads with WHOIS and ASN/route-visibility before certificate/HTTP/tech-fingerprinting tools.
+- **TCP Ping and Port Scanner merged** into a single "Port Checker" card — one port for a quick reachability check, a list to sweep multiple — removing the redundant `tcp_ping` backend command.
+
+### Fixed
+- DNS Validation, Multi-Resolver Health, DNSBL Check, and DMARC Inspector were silently displaying raw JSON dumps instead of their intended formatted text, due to a `rawOutput`/`raw_output` field-name mismatch between the Rust backend and the frontend. All four now render correctly.
+- TCP ping, port scan, and MTR results are now parsed into readable summaries instead of raw JSON dumps.
+
+---
+
 ## [0.5.3] — 2026-07-12
 
 Visual redesign and tray support — no changes to diagnostic behavior.

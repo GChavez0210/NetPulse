@@ -2515,7 +2515,7 @@ dependencies = [
 
 [[package]]
 name = "netpulse"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "futures",
  "hickory-resolver",
