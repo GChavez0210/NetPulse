@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { runOnEnter } from '../trace/TraceTab';
 import { parseIntOrDefault } from '../../utils/networkUtils';
+import ClearButton from '../../components/ClearButton';
 
 export default function DiagnosticsTab() {
   // MTR
@@ -64,7 +65,6 @@ export default function DiagnosticsTab() {
       const result = await invoke('mtr_run', { host, rounds: mtrRounds });
       setMtrResult(result);
       setStatus(`MTR diagnostic complete to ${host}.`);
-      setMtrHostInput('');
     } catch (error) {
       setMtrResult({ error: String(error?.message || error) });
       setStatus('MTR diagnostic failed.');
@@ -105,7 +105,6 @@ export default function DiagnosticsTab() {
       const result = await invoke('dns_query', { domain: host, recordType: dnsType });
       setDnsResult(result);
       setStatus(`DNS query for ${host} complete.`);
-      setDnsHostInput('');
     } catch (error) {
       setDnsResult({ error: String(error?.message || error) });
       setStatus('DNS query failed.');
@@ -135,7 +134,6 @@ export default function DiagnosticsTab() {
       const result = await invoke('port_scan', { host, ports, timeoutMs: 900 });
       setPortScanResult(result);
       setStatus(ports.length === 1 ? `Port check complete on ${host}.` : `Port scan complete on ${host}.`);
-      setPortScanHostInput('');
     } catch (error) {
       setPortScanResult({ error: String(error?.message || error) });
       setStatus('Port scan failed.');
@@ -155,7 +153,6 @@ export default function DiagnosticsTab() {
       const res = await invoke('dns_validate', { domain: target });
       setDnsValResult(res);
       setStatus(res.ok ? 'DNS Validation complete.' : 'DNS Validation failed.');
-      if (res.ok) setDnsValInput('');
     } catch (e) {
       setDnsValResult({ ok: false, error: String(e?.message || e) });
       setStatus('DNS Validation runtime error.');
@@ -175,7 +172,6 @@ export default function DiagnosticsTab() {
       const res = await invoke('dns_health', { domain: target });
       setDnsHealthResult(res);
       setStatus(res.ok ? 'Multi-Resolver Check complete.' : 'Health check failed.');
-      if (res.ok) setDnsHealthInput('');
     } catch (e) {
       setDnsHealthResult({ ok: false, error: String(e?.message || e) });
       setStatus('Health Check runtime error.');
@@ -195,13 +191,61 @@ export default function DiagnosticsTab() {
       const res = await invoke('dnsbl_check', { ip });
       setDnsblResult(res);
       setStatus(res.ok ? 'DNSBL check complete.' : (res.error || 'DNSBL check failed.'));
-      if (res.ok) setDnsblInput('');
     } catch (e) {
       setDnsblResult({ ok: false, error: String(e?.message || e) });
       setStatus('DNSBL check runtime error.');
     } finally {
       setDnsblLoading(false);
     }
+  };
+
+  // ── Per-tool reset ────────────────────────────────────────────────────────
+  // Inputs and results otherwise stick around for the lifetime of the app, so
+  // each card gets its own trash button to wipe just that tool.
+
+  const resetPortScan = () => {
+    setPortScanHostInput('');
+    setPortListInput('443');
+    setPortScanResult(null);
+    setStatus('Port Checker cleared.');
+  };
+
+  const resetMtr = () => {
+    setMtrHostInput('');
+    setMtrRounds(5);
+    setMtrResult(null);
+    setStatus('MTR-style cleared.');
+  };
+
+  const resetSpeedTest = () => {
+    setSpeedResult(null);
+    setSpeedElapsed(0);
+    setStatus('Speed Test cleared.');
+  };
+
+  const resetDnsQuery = () => {
+    setDnsHostInput('');
+    setDnsType('A');
+    setDnsResult(null);
+    setStatus('DNS Toolkit cleared.');
+  };
+
+  const resetDnsVal = () => {
+    setDnsValInput('');
+    setDnsValResult(null);
+    setStatus('DNS Validation cleared.');
+  };
+
+  const resetDnsHealth = () => {
+    setDnsHealthInput('');
+    setDnsHealthResult(null);
+    setStatus('Multi-Resolver Health cleared.');
+  };
+
+  const resetDnsbl = () => {
+    setDnsblInput('');
+    setDnsblResult(null);
+    setStatus('DNSBL Check cleared.');
   };
 
   const handleCopyRaw = async (text) => {
@@ -312,7 +356,14 @@ export default function DiagnosticsTab() {
 
         {/* Port Checker */}
         <article className="diag-card">
-          <h3>Port Checker</h3>
+          <div className="diag-card-head">
+            <h3>Port Checker</h3>
+            <ClearButton
+              onClear={resetPortScan}
+              disabled={portScanLoading || (!portScanHostInput && portListInput === '443' && !portScanResult)}
+              title="Clear Port Checker"
+            />
+          </div>
           <p className="diag-card-desc">
             Checks TCP port reachability on a host — enter one port for a quick check, or a list to sweep multiple.
           </p>
@@ -340,7 +391,14 @@ export default function DiagnosticsTab() {
 
         {/* MTR */}
         <article className="diag-card">
-          <h3>MTR-style (Ping + Trace)</h3>
+          <div className="diag-card-head">
+            <h3>MTR-style (Ping + Trace)</h3>
+            <ClearButton
+              onClear={resetMtr}
+              disabled={mtrLoading || (!mtrHostInput && mtrRounds === 5 && !mtrResult)}
+              title="Clear MTR-style"
+            />
+          </div>
           <p className="diag-card-desc">
             Combines ping and traceroute to show per-hop loss and latency.
           </p>
@@ -371,7 +429,14 @@ export default function DiagnosticsTab() {
 
         {/* Speed Test */}
         <article className="diag-card">
-          <h3>Speed Test</h3>
+          <div className="diag-card-head">
+            <h3>Speed Test</h3>
+            <ClearButton
+              onClear={resetSpeedTest}
+              disabled={speedLoading || !speedResult}
+              title="Clear Speed Test"
+            />
+          </div>
           <p className="diag-card-desc">
             Download/upload throughput and latency against Cloudflare's public speed-test backend.
           </p>
@@ -410,7 +475,14 @@ export default function DiagnosticsTab() {
 
         {/* DNS Toolkit */}
         <article className="diag-card">
-          <h3>DNS Toolkit</h3>
+          <div className="diag-card-head">
+            <h3>DNS Toolkit</h3>
+            <ClearButton
+              onClear={resetDnsQuery}
+              disabled={dnsLoading || (!dnsHostInput && dnsType === 'A' && !dnsResult)}
+              title="Clear DNS Toolkit"
+            />
+          </div>
           <p className="diag-card-desc">
             Resolves a domain's records via the local resolver and Google DNS.
           </p>
@@ -442,7 +514,14 @@ export default function DiagnosticsTab() {
 
         {/* DNS Validation */}
         <article className="diag-card">
-          <h3>DNS Validation</h3>
+          <div className="diag-card-head">
+            <h3>DNS Validation</h3>
+            <ClearButton
+              onClear={resetDnsVal}
+              disabled={dnsValLoading || (!dnsValInput && !dnsValResult)}
+              title="Clear DNS Validation"
+            />
+          </div>
           <p className="diag-card-desc">
             Checks a domain's DNS setup for common misconfigurations.
           </p>
@@ -473,7 +552,14 @@ export default function DiagnosticsTab() {
 
         {/* Multi-Resolver Health */}
         <article className="diag-card">
-          <h3>Multi-Resolver Health (Split DNS)</h3>
+          <div className="diag-card-head">
+            <h3>Multi-Resolver Health (Split DNS)</h3>
+            <ClearButton
+              onClear={resetDnsHealth}
+              disabled={dnsHealthLoading || (!dnsHealthInput && !dnsHealthResult)}
+              title="Clear Multi-Resolver Health"
+            />
+          </div>
           <p className="diag-card-desc">
             Compares answers across resolvers to catch split-DNS or poisoning issues.
           </p>
@@ -504,7 +590,14 @@ export default function DiagnosticsTab() {
 
         {/* DNSBL Check */}
         <article className="diag-card">
-          <h3>DNSBL Blacklist Check</h3>
+          <div className="diag-card-head">
+            <h3>DNSBL Blacklist Check</h3>
+            <ClearButton
+              onClear={resetDnsbl}
+              disabled={dnsblLoading || (!dnsblInput && !dnsblResult)}
+              title="Clear DNSBL Blacklist Check"
+            />
+          </div>
           <p className="diag-card-desc">
             Checks an IPv4 address against public DNS-based blacklists.
           </p>

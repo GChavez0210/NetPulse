@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { runOnEnter } from '../trace/TraceTab';
 import { buildWhoisPresentation, parseIntOrDefault } from '../../utils/networkUtils';
+import ClearButton from '../../components/ClearButton';
 
 export default function ReconTab() {
   // SSL / TLS
@@ -74,7 +75,6 @@ export default function ReconTab() {
       const res = await invoke('ssl_inspect', { host, port: sslPort });
       setSslResult(res);
       setStatus(res.ok ? `Certificate inspection complete for ${host}.` : `SSL error: ${res.error}`);
-      if (res.ok) setSslHost('');
     } catch (e) {
       setSslResult({ ok: false, error: String(e?.message || e) });
       setStatus('SSL inspection failed.');
@@ -93,7 +93,6 @@ export default function ReconTab() {
       const res = await invoke('http_headers', { url });
       setHeadersResult(res);
       setStatus(res.ok ? `Headers retrieved (${res.status} ${res.status_text}).` : `Headers error: ${res.error}`);
-      if (res.ok) setHeadersUrl('');
     } catch (e) {
       setHeadersResult({ ok: false, error: String(e?.message || e) });
       setStatus('HTTP headers fetch failed.');
@@ -112,7 +111,6 @@ export default function ReconTab() {
       const res = await invoke('tech_detect', { url });
       setTechResult(res);
       setStatus(res.ok ? `Detected ${res.technologies?.length ?? 0} technologies.` : `Tech detect error: ${res.error}`);
-      if (res.ok) setTechUrl('');
     } catch (e) {
       setTechResult({ ok: false, error: String(e?.message || e) });
       setStatus('Technology detection failed.');
@@ -131,7 +129,6 @@ export default function ReconTab() {
       const res = await invoke('mac_lookup', { mac: target });
       setMacResult(res);
       setStatus(res.ok ? 'MAC lookup complete.' : 'MAC lookup failed.');
-      if (res.ok) setMacInput('');
     } catch (e) {
       const msg = String(e?.message || e);
       setMacResult({ ok: false, error: msg });
@@ -151,7 +148,6 @@ export default function ReconTab() {
       const res = await invoke('dns_dmarc', { domain: target });
       setDmarcResult(res);
       setStatus(res.ok ? 'DMARC validation complete.' : 'DMARC validation failed.');
-      if (res.ok) setDmarcInput('');
     } catch (e) {
       setDmarcResult({ ok: false, error: String(e?.message || e) });
       setStatus('DMARC validation error.');
@@ -171,7 +167,6 @@ export default function ReconTab() {
       if (result.ok) {
         setWhoisData({ normalized: result.normalized, raw: result.raw, source: result.source || 'Apilayer', data: result.normalized });
         setStatus(`WHOIS lookup complete via ${result.source || 'Apilayer'}.`);
-        setWhoisInput('');
       } else {
         setWhoisData(result.normalized ?? { error: result.error });
         setStatus(result.error || 'WHOIS lookup failed.');
@@ -194,7 +189,6 @@ export default function ReconTab() {
       const res = await invoke('asn_lookup', { query: ip });
       setAsnResult(res);
       setStatus(res.ok ? `ASN lookup complete: AS${res.asn}.` : (res.error || 'ASN lookup failed.'));
-      if (res.ok) setAsnInput('');
     } catch (e) {
       setAsnResult({ ok: false, error: String(e?.message || e) });
       setStatus('ASN lookup error.');
@@ -213,13 +207,65 @@ export default function ReconTab() {
       const res = await invoke('bgp_looking_glass', { resource });
       setLgResult(res);
       setStatus(res.ok ? `Looking glass complete: seen by ${res.peer_count} peer(s).` : (res.error || 'Looking glass failed.'));
-      if (res.ok) setLgInput('');
     } catch (e) {
       setLgResult({ ok: false, error: String(e?.message || e) });
       setStatus('Looking glass error.');
     } finally {
       setLgLoading(false);
     }
+  };
+
+  // ── Per-tool reset ────────────────────────────────────────────────────────
+  // Inputs and results otherwise stick around for the lifetime of the app, so
+  // each card gets its own trash button to wipe just that tool.
+
+  const resetWhois = () => {
+    setWhoisInput('');
+    setWhoisData(null);
+    setStatus('WHOIS Lookup cleared.');
+  };
+
+  const resetAsn = () => {
+    setAsnInput('');
+    setAsnResult(null);
+    setStatus('ASN Lookup cleared.');
+  };
+
+  const resetLookingGlass = () => {
+    setLgInput('');
+    setLgResult(null);
+    setStatus('BGP Looking Glass cleared.');
+  };
+
+  const resetDmarc = () => {
+    setDmarcInput('');
+    setDmarcResult(null);
+    setStatus('DMARC Inspector cleared.');
+  };
+
+  const resetSsl = () => {
+    setSslHost('');
+    setSslPort(443);
+    setSslResult(null);
+    setStatus('SSL / TLS Inspector cleared.');
+  };
+
+  const resetHeaders = () => {
+    setHeadersUrl('');
+    setHeadersResult(null);
+    setStatus('HTTP Headers cleared.');
+  };
+
+  const resetTech = () => {
+    setTechUrl('');
+    setTechResult(null);
+    setStatus('Tech Detect cleared.');
+  };
+
+  const resetMac = () => {
+    setMacInput('');
+    setMacResult(null);
+    setStatus('MAC OUI Matcher cleared.');
   };
 
   const handleCopyWhois = async () => {
@@ -267,7 +313,14 @@ export default function ReconTab() {
 
         {/* ── WHOIS Lookup ─────────────────────────────────────────────────── */}
         <article className="diag-card">
-          <h3>WHOIS Lookup</h3>
+          <div className="diag-card-head">
+            <h3>WHOIS Lookup</h3>
+            <ClearButton
+              onClear={resetWhois}
+              disabled={whoisLoading || (!whoisInput && !whoisData)}
+              title="Clear WHOIS Lookup"
+            />
+          </div>
           <p className="diag-card-desc">
             Registry ownership and RDAP details for a hostname or IP.
           </p>
@@ -317,7 +370,14 @@ export default function ReconTab() {
 
         {/* ── ASN / Network Lookup ─────────────────────────────────────────── */}
         <article className="diag-card">
-          <h3>ASN / Network Lookup</h3>
+          <div className="diag-card-head">
+            <h3>ASN / Network Lookup</h3>
+            <ClearButton
+              onClear={resetAsn}
+              disabled={asnLoading || (!asnInput && !asnResult)}
+              title="Clear ASN Lookup"
+            />
+          </div>
           <p className="diag-card-desc">
             Who is currently announcing this IP on the internet — ASN, BGP prefix, and origin network.
           </p>
@@ -357,7 +417,14 @@ export default function ReconTab() {
 
         {/* ── BGP Looking Glass ────────────────────────────────────────────── */}
         <article className="diag-card">
-          <h3>BGP Looking Glass</h3>
+          <div className="diag-card-head">
+            <h3>BGP Looking Glass</h3>
+            <ClearButton
+              onClear={resetLookingGlass}
+              disabled={lgLoading || (!lgInput && !lgResult)}
+              title="Clear BGP Looking Glass"
+            />
+          </div>
           <p className="diag-card-desc">
             Real-time route visibility from RIPE RIS route collectors — confirms propagation and flags conflicting origins.
           </p>
@@ -403,7 +470,14 @@ export default function ReconTab() {
 
         {/* ── DMARC Inspector ─────────────────────────────────────────────── */}
         <article className="diag-card">
-          <h3>DMARC Inspector</h3>
+          <div className="diag-card-head">
+            <h3>DMARC Inspector</h3>
+            <ClearButton
+              onClear={resetDmarc}
+              disabled={dmarcLoading || (!dmarcInput && !dmarcResult)}
+              title="Clear DMARC Inspector"
+            />
+          </div>
           <p className="diag-card-desc">
             Validates DMARC policy tags for a domain.
           </p>
@@ -434,7 +508,14 @@ export default function ReconTab() {
 
         {/* ── SSL / TLS Inspector ─────────────────────────────────────────── */}
         <article className="diag-card">
-          <h3>SSL / TLS Inspector</h3>
+          <div className="diag-card-head">
+            <h3>SSL / TLS Inspector</h3>
+            <ClearButton
+              onClear={resetSsl}
+              disabled={sslLoading || (!sslHost && sslPort === 443 && !sslResult)}
+              title="Clear SSL / TLS Inspector"
+            />
+          </div>
           <p className="diag-card-desc">
             Certificate chain, expiry, SANs, and TLS version.
           </p>
@@ -492,7 +573,14 @@ export default function ReconTab() {
 
         {/* ── HTTP Headers ────────────────────────────────────────────────── */}
         <article className="diag-card">
-          <h3>HTTP Headers</h3>
+          <div className="diag-card-head">
+            <h3>HTTP Headers</h3>
+            <ClearButton
+              onClear={resetHeaders}
+              disabled={headersLoading || (!headersUrl && !headersResult)}
+              title="Clear HTTP Headers"
+            />
+          </div>
           <p className="diag-card-desc">
             Response headers, status, and redirect chain.
           </p>
@@ -541,7 +629,14 @@ export default function ReconTab() {
 
         {/* ── Technology Detection ────────────────────────────────────────── */}
         <article className="diag-card">
-          <h3>Tech Detect</h3>
+          <div className="diag-card-head">
+            <h3>Tech Detect</h3>
+            <ClearButton
+              onClear={resetTech}
+              disabled={techLoading || (!techUrl && !techResult)}
+              title="Clear Tech Detect"
+            />
+          </div>
           <p className="diag-card-desc">
             Fingerprint web technologies from headers and HTML.
           </p>
@@ -585,7 +680,14 @@ export default function ReconTab() {
 
         {/* ── MAC Address OUI Matcher ─────────────────────────────────────── */}
         <article className="diag-card">
-          <h3>MAC Address OUI Matcher</h3>
+          <div className="diag-card-head">
+            <h3>MAC Address OUI Matcher</h3>
+            <ClearButton
+              onClear={resetMac}
+              disabled={macLoading || (!macInput && !macResult)}
+              title="Clear MAC OUI Matcher"
+            />
+          </div>
           <p className="diag-card-desc">
             Identify hardware vendor from a MAC address.
           </p>

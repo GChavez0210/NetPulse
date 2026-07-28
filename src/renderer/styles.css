@@ -1400,6 +1400,40 @@ strong.critical { color: var(--color-danger); }
   margin: 0;
 }
 
+.diag-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.diag-clear-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.diag-clear-btn:hover:not(:disabled) {
+  background: var(--color-danger-subtle);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
+}
+
+.diag-clear-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
 .diag-card-desc {
   font-size: 0.72rem;
   color: var(--color-text-muted);
