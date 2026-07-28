@@ -92,16 +92,44 @@ function parseTracerouteLine(rawLine) {
   };
 }
 
+// Traceroute RTTs are cumulative from the source, so the useful per-hop figure
+// is the delta against the previous *responding* hop — that's where latency was
+// actually introduced. A delta spanning a timeout covers both hops together.
+function withHopDeltas(hops) {
+  let prevRtt = null;
+  return hops.map((hop) => {
+    if (hop.avgLatency == null) return { ...hop, delta: null };
+    const delta = prevRtt == null ? hop.avgLatency : hop.avgLatency - prevRtt;
+    prevRtt = hop.avgLatency;
+    return { ...hop, delta };
+  });
+}
+
 function parseTracerouteOutput(output) {
   const lines = String(output || '')
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
-  const hops = lines.map(parseTracerouteLine).filter(Boolean);
-  const rtts = hops.map((h) => h.avgLatency).filter((v) => v != null);
-  const avgRtt =
-    rtts.length > 0 ? rtts.reduce((a, b) => a + b, 0) / rtts.length : null;
-  return { hops, totalHops: hops.length, avgRtt };
+  const hops = withHopDeltas(lines.map(parseTracerouteLine).filter(Boolean));
+
+  const responding = hops.filter((h) => h.avgLatency != null);
+  // End-to-end latency is the last hop that answered, not an average of all of
+  // them — averaging cumulative RTTs understates the real distance to target.
+  const destRtt = responding.length > 0 ? responding[responding.length - 1].avgLatency : null;
+  // Bars scale to the slowest hop in this trace so the shape stays readable
+  // whether the route is 5 ms across town or 300 ms intercontinental.
+  const maxRtt = responding.length > 0 ? Math.max(...responding.map((h) => h.avgLatency)) : null;
+
+  let worstJump = null;
+  let worstJumpHop = null;
+  hops.forEach((h) => {
+    if (h.delta != null && h.delta > 0 && (worstJump == null || h.delta > worstJump)) {
+      worstJump = h.delta;
+      worstJumpHop = h.hop;
+    }
+  });
+
+  return { hops, totalHops: hops.length, destRtt, maxRtt, worstJump, worstJumpHop };
 }
 
 export default function TraceTab({ addNotification }) {
@@ -109,7 +137,13 @@ export default function TraceTab({ addNotification }) {
   const [traceLoading, setTraceLoading] = useState(false);
   const [traceHops, setTraceHops] = useState([]);
   const [traceOutput, setTraceOutput] = useState('No traceroute execution yet.');
-  const [traceSummary, setTraceSummary] = useState({ totalHops: 0, avgRtt: null });
+  const [traceSummary, setTraceSummary] = useState({
+    totalHops: 0,
+    destRtt: null,
+    maxRtt: null,
+    worstJump: null,
+    worstJumpHop: null,
+  });
   const [geoData, setGeoData] = useState({});
   const [geoLoading, setGeoLoading] = useState(false);
   const [status, setStatus] = useState('Ready.');
@@ -157,7 +191,7 @@ export default function TraceTab({ addNotification }) {
     setGeoLoading(false);
     setTraceOutput('Initializing trace route...');
     setStatus(`Running traceroute to ${host}...`);
-    setTraceSummary({ totalHops: 0, avgRtt: null });
+    setTraceSummary({ totalHops: 0, destRtt: null, maxRtt: null, worstJump: null, worstJumpHop: null });
 
     try {
       const result = await invoke('trace_run', { host });
@@ -166,15 +200,21 @@ export default function TraceTab({ addNotification }) {
       setTraceOutput(output);
       const parsed = parseTracerouteOutput(output);
       setTraceHops(parsed.hops);
-      setTraceSummary({ totalHops: parsed.totalHops, avgRtt: parsed.avgRtt });
+      setTraceSummary({
+        totalHops: parsed.totalHops,
+        destRtt: parsed.destRtt,
+        maxRtt: parsed.maxRtt,
+        worstJump: parsed.worstJump,
+        worstJumpHop: parsed.worstJumpHop,
+      });
       setStatus(`Traceroute complete to ${host}.`);
       addNotification?.(
         'trace_complete',
-        `Traceroute to ${host} complete — ${parsed.totalHops} hops, avg RTT ${
-          parsed.avgRtt != null ? `${parsed.avgRtt.toFixed(1)} ms` : 'n/a'
+        `Traceroute to ${host} complete — ${parsed.totalHops} hops, ${
+          parsed.destRtt != null ? `${parsed.destRtt.toFixed(1)} ms to destination` : 'destination did not respond'
         }`
       );
-      setTraceHost('');
+      // The host stays in the box so Rerun works and CSV export can name the target.
       // Fetch GeoIP in background after results are shown
       fetchGeoData(parsed.hops, generation);
     } catch (error) {
@@ -195,7 +235,9 @@ export default function TraceTab({ addNotification }) {
         'targetHost',
         'createdAt',
         'totalHops',
-        'avgRttMs',
+        'destRttMs',
+        'worstJumpMs',
+        'worstJumpHop',
         'hop',
         'hostname',
         'ip',
@@ -203,6 +245,7 @@ export default function TraceTab({ addNotification }) {
         'asn',
         'status',
         'avgLatencyMs',
+        'deltaMs',
         'timedOut',
         'latenciesMs',
       ].join(','),
@@ -214,7 +257,9 @@ export default function TraceTab({ addNotification }) {
           escapeCsv(traceHost || ''),
           escapeCsv(new Date().toISOString()),
           escapeCsv(traceSummary.totalHops),
-          escapeCsv(traceSummary.avgRtt != null ? traceSummary.avgRtt.toFixed(2) : ''),
+          escapeCsv(traceSummary.destRtt != null ? traceSummary.destRtt.toFixed(2) : ''),
+          escapeCsv(traceSummary.worstJump != null ? traceSummary.worstJump.toFixed(2) : ''),
+          escapeCsv(traceSummary.worstJumpHop ?? ''),
           escapeCsv(hop.hop),
           escapeCsv(hop.hostname || ''),
           escapeCsv(hop.ip),
@@ -222,6 +267,7 @@ export default function TraceTab({ addNotification }) {
           escapeCsv(geo?.as_info || ''),
           escapeCsv(hop.status),
           escapeCsv(hop.avgLatency != null ? hop.avgLatency.toFixed(2) : ''),
+          escapeCsv(hop.delta != null ? hop.delta.toFixed(2) : ''),
           escapeCsv(Boolean(hop.timedOut)),
           escapeCsv((hop.latencies || []).join('|')),
         ].join(',')
@@ -293,11 +339,22 @@ export default function TraceTab({ addNotification }) {
           <strong>{traceSummary.totalHops}</strong>
         </article>
         <article className="trace-stat">
-          <span>Average RTT</span>
+          <span>To Destination</span>
           <strong>
-            {traceSummary.avgRtt != null
-              ? `${traceSummary.avgRtt.toFixed(1)} ms`
+            {traceSummary.destRtt != null
+              ? `${traceSummary.destRtt.toFixed(1)} ms`
               : 'n/a'}
+          </strong>
+        </article>
+        <article className="trace-stat">
+          <span>Worst Jump</span>
+          <strong className={traceSummary.worstJump != null ? 'warn' : undefined}>
+            {traceSummary.worstJump != null
+              ? `+${traceSummary.worstJump.toFixed(1)} ms`
+              : 'n/a'}
+            {traceSummary.worstJumpHop != null && (
+              <em className="trace-stat-note">hop {traceSummary.worstJumpHop}</em>
+            )}
           </strong>
         </article>
       </div>
@@ -309,21 +366,39 @@ export default function TraceTab({ addNotification }) {
         ) : null}
         {traceHops.map((hop) => {
           const geo = geoData[hop.ip];
+          const noResponse = hop.avgLatency == null;
+          const isWorstJump = traceSummary.worstJumpHop != null && hop.hop === traceSummary.worstJumpHop;
+          // Scale against the slowest hop in this trace, not a fixed ceiling.
+          const barPct =
+            noResponse || !traceSummary.maxRtt
+              ? 0
+              : Math.max(2, (hop.avgLatency / traceSummary.maxRtt) * 100);
           return (
-            <article key={`${hop.hop}-${hop.ip}`} className="trace-hop">
+            <article
+              key={`${hop.hop}-${hop.ip}`}
+              className={`trace-hop${noResponse ? ' no-response' : ''}${isWorstJump ? ' worst-jump' : ''}`}
+            >
               <div className="trace-hop-head">
                 <strong>Hop {hop.hop}</strong>
-                <span className={`trace-pill ${hop.status}`}>
-                  {hop.unreachable
-                    ? 'unreachable'
-                    : hop.avgLatency != null
-                    ? `${hop.avgLatency.toFixed(1)} ms`
-                    : 'timeout'}
-                </span>
+                <div className="trace-hop-metrics">
+                  {hop.delta != null && (
+                    <span className={`trace-delta${hop.delta > 0 ? ' up' : ' down'}`}>
+                      {hop.delta > 0 ? '+' : '−'}
+                      {Math.abs(hop.delta).toFixed(1)}
+                    </span>
+                  )}
+                  <span className={`trace-pill ${hop.status}`}>
+                    {hop.unreachable
+                      ? 'unreachable'
+                      : hop.avgLatency != null
+                      ? `${hop.avgLatency.toFixed(1)} ms`
+                      : 'no response'}
+                  </span>
+                </div>
               </div>
               <p className="trace-host">
                 {hop.hostname ? `${hop.hostname} ` : ''}
-                <span>{hop.ip}</span>
+                <span>{noResponse && hop.ip === '*' ? 'no response' : hop.ip}</span>
                 {geo && (
                   <span
                     className="geo-tag"
@@ -334,14 +409,18 @@ export default function TraceTab({ addNotification }) {
                   </span>
                 )}
               </p>
-              <div className="latency-bar-glass">
-                <div
-                  className={`latency-bar-fill ${hop.status}`}
-                  style={{
-                    width: `${Math.min(((hop.avgLatency || 180) / 180) * 100, 100)}%`,
-                  }}
-                />
-              </div>
+              {noResponse ? (
+                // A timeout is missing data, not slow data — never draw a filled bar,
+                // which would read as the worst latency in the route.
+                <div className="latency-bar-glass empty" title="Hop did not respond" />
+              ) : (
+                <div className="latency-bar-glass">
+                  <div
+                    className={`latency-bar-fill ${hop.status}`}
+                    style={{ width: `${Math.min(barPct, 100)}%` }}
+                  />
+                </div>
+              )}
             </article>
           );
         })}

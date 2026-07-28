@@ -438,6 +438,14 @@ button.danger:disabled:hover {
   border: 1px solid var(--color-warning-border);
 }
 
+/* Same degraded severity as jitter — kept as its own class so the two can be
+   told apart later without changing what the status light shows. */
+.pill-loss {
+  background: var(--color-warning-subtle);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning-border);
+}
+
 .pill-timeout {
   background: var(--color-danger-subtle);
   color: var(--color-danger);
@@ -666,7 +674,7 @@ button.danger:disabled:hover {
 /* ── Metric Row ── */
 .metric-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   margin-top: 12px;
 }
@@ -696,6 +704,13 @@ button.danger:disabled:hover {
   font-size: 1.1rem;
   color: var(--color-text-primary);
   line-height: 1.2;
+}
+
+.metric-sub {
+  font-style: normal;
+  font-size: 0.62rem;
+  color: var(--color-text-muted);
+  margin-left: 4px;
 }
 
 /* ── Card Actions ── */
@@ -1019,6 +1034,35 @@ button.danger:disabled:hover {
   color: var(--color-text-secondary);
 }
 
+.trace-hop-metrics {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trace-hop.no-response {
+  opacity: 0.65;
+}
+
+/* The hop that introduced the most latency — the answer traceroute exists for. */
+.trace-hop.worst-jump {
+  border-color: var(--color-warning-border);
+}
+
+.trace-delta {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.trace-delta.up {
+  color: var(--color-warning);
+}
+
+.trace-delta.down {
+  color: var(--color-success);
+}
+
 .trace-host {
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -1069,7 +1113,7 @@ button.danger:disabled:hover {
 
 .trace-summary {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 
@@ -1094,6 +1138,17 @@ button.danger:disabled:hover {
   font-family: var(--font-mono);
   font-size: 1.1rem;
   color: var(--color-text-primary);
+}
+
+.trace-stat strong.warn {
+  color: var(--color-warning);
+}
+
+.trace-stat-note {
+  font-style: normal;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  margin-left: 6px;
 }
 
 .trace-list {
@@ -1134,6 +1189,15 @@ button.danger:disabled:hover {
   border-radius: 2px;
   overflow: hidden;
   margin-top: 8px;
+}
+
+/* No data, not zero latency — hatched track reads as "nothing measured". */
+.latency-bar-glass.empty {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--color-border) 0 3px,
+    transparent 3px 7px
+  );
 }
 
 .latency-bar-fill {
@@ -1295,54 +1359,70 @@ button.danger:disabled:hover {
 }
 
 /* ── Loss Donut ── */
-.loss-donut-card {
-  display: flex;
-  justify-content: center;
+.loss-headline {
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: 16px;
-}
-
-.loss-donut {
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-}
-
-.loss-donut > div {
-  text-align: center;
-  background: var(--color-bg-elevated);
-  width: 110px;
-  height: 110px;
-  border-radius: 50%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  border: 1px solid var(--color-border);
+  gap: 2px;
 }
 
-.loss-donut strong {
-  font-family: var(--font-mono);
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--color-text-primary);
-  line-height: 1;
-}
-
-.loss-donut span {
+.loss-headline-label {
   font-family: var(--font-mono);
   font-size: 0.62rem;
   color: var(--color-text-secondary);
-  display: block;
-  margin-top: 2px;
   text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.loss-headline strong {
+  font-family: var(--font-mono);
+  font-size: 2.1rem;
+  line-height: 1.1;
+  color: var(--color-text-primary);
+}
+
+.loss-headline strong.warn     { color: var(--color-warning); }
+.loss-headline strong.critical { color: var(--color-danger); }
+
+.loss-headline-status {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
   letter-spacing: 0.06em;
+}
+
+.loss-headline-status.healthy  { color: var(--color-success); }
+.loss-headline-status.warn     { color: var(--color-warning); }
+.loss-headline-status.critical { color: var(--color-danger); }
+
+/* ── Flood RTT Chart ── */
+.flood-chart {
+  height: 170px;
+  background: var(--color-bg-control);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 8px 4px 4px;
+}
+
+.flood-chart.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.flood-chart-tip {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  padding: 6px 10px;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
 }
 
 /* ── Diag Metric ── */
@@ -1609,7 +1689,7 @@ strong.critical { color: var(--color-danger); }
     flex-direction: row;
     flex-wrap: wrap;
   }
-  .packetloss-left .loss-donut-card {
+  .packetloss-left .loss-headline {
     width: 100%;
   }
 }
@@ -1838,6 +1918,39 @@ strong.critical { color: var(--color-danger); }
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  flex: 1;
+}
+
+/* Stays in the layout at low opacity so rows don't reflow on hover; keyboard
+   focus reveals it the same way the pointer does. */
+.notif-dismiss-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  margin-top: 1px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  color: var(--color-text-muted);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.1s ease;
+}
+
+.notif-item:hover .notif-dismiss-btn,
+.notif-dismiss-btn:focus-visible {
+  opacity: 1;
+}
+
+.notif-dismiss-btn:hover {
+  background: var(--color-danger-subtle);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
 }
 
 .notif-text {

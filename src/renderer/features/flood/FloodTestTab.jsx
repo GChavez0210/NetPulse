@@ -1,21 +1,100 @@
-import React, { useState, useEffect, useRef, memo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import {
+  LineChart as ReLineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import { runOnEnter } from '../trace/TraceTab';
-import { getFloodPacketState } from '../../utils/networkUtils';
+import {
+  getFloodPacketState,
+  classifyRtt,
+  medianOf,
+  SPIKE_BASELINE_SAMPLES,
+  SPIKE_RATIO,
+} from '../../utils/networkUtils';
 
 // Memoized so React can bail out of re-rendering the ~999 unchanged cells
 // on every single-packet sample update instead of re-diffing all of them.
-const PacketCell = memo(function PacketCell({ state }) {
-  return <span className={`pkt ${state}`} />;
+// The title is built in here rather than in the parent's map so it costs
+// nothing for cells whose props didn't change.
+const PacketCell = memo(function PacketCell({ state, seq, rtt }) {
+  const title =
+    state === 'pending'
+      ? `seq ${seq} — not sent yet`
+      : state === 'failed'
+      ? `seq ${seq} — timeout`
+      : `seq ${seq} — ${rtt != null ? `${rtt.toFixed(1)} ms` : 'no RTT'}`;
+  return <span className={`pkt ${state}`} title={title} />;
 });
 
-const SequenceGrid = memo(function SequenceGrid({ packetStates }) {
+const SequenceGrid = memo(function SequenceGrid({ packetStates, rtts }) {
   return (
     <div className="sequence-grid">
       {packetStates.map((state, index) => (
-        <PacketCell key={index} state={state} />
+        <PacketCell key={index} state={state} seq={index + 1} rtt={rtts[index]} />
       ))}
+    </div>
+  );
+});
+
+// Timeouts are left as null so recharts breaks the line rather than drawing
+// through the gap — a dropped packet isn't a latency reading of zero.
+const FloodChart = memo(function FloodChart({ samples }) {
+  const data = useMemo(
+    () => samples.map((s) => ({ seq: s.seq, rtt: s.timeout ? null : s.rtt })),
+    [samples]
+  );
+
+  if (data.length === 0) {
+    return <div className="flood-chart empty">Awaiting samples...</div>;
+  }
+
+  const CustomTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    const point = payload[0].payload;
+    return (
+      <div className="flood-chart-tip">
+        <div>seq {point.seq}</div>
+        <div style={{ color: point.rtt == null ? 'var(--color-danger)' : 'var(--color-success)' }}>
+          {point.rtt == null ? 'timeout' : `${point.rtt.toFixed(1)} ms`}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flood-chart">
+      <ResponsiveContainer width="100%" height="100%">
+        <ReLineChart data={data} margin={{ top: 4, right: 4, bottom: 0, left: -26 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+          <XAxis
+            dataKey="seq"
+            tick={{ fontSize: 10, fontFamily: 'monospace', fill: 'var(--color-text-muted)' }}
+            interval="preserveStartEnd"
+            minTickGap={40}
+          />
+          <YAxis
+            domain={['auto', 'auto']}
+            tick={{ fontSize: 10, fontFamily: 'monospace', fill: 'var(--color-text-muted)' }}
+          />
+          <Tooltip content={<CustomTooltip />} />
+          <Line
+            type="monotone"
+            dataKey="rtt"
+            stroke="var(--color-success)"
+            strokeWidth={1.5}
+            dot={false}
+            connectNulls={false}
+            isAnimationActive={false}
+          />
+        </ReLineChart>
+      </ResponsiveContainer>
     </div>
   );
 });
@@ -53,7 +132,6 @@ export default function FloodTestTab({ addNotification }) {
     received: 0,
     lost: 0,
     lossPct: 0,
-    jitterCount: 0,
     avgLatency: null,
     minRtt: null,
     maxRtt: null,
@@ -61,7 +139,13 @@ export default function FloodTestTab({ addNotification }) {
     jitterMs: null,
     lossStreakMax: 0,
     status: 'idle',
+    // Frozen reference RTT for spike detection, plus the replies it's built from.
+    baseline: null,
+    baselineRtts: [],
     packetStates: [],
+    // Per-packet RTTs, retained so the run can be charted and exported.
+    rtts: [],
+    samples: [],
     logLines: [makeLine('meta', '[init] Ready for packet loss diagnostics.')]
   }));
 
@@ -76,16 +160,44 @@ export default function FloodTestTab({ addNotification }) {
         if (!sample || typeof sample.seq !== 'number') return;
         setRapidDetails((prev) => {
           const nextStates = [...prev.packetStates];
+          const nextRtts = [...prev.rtts];
           const index = sample.seq - 1;
-          if (index >= 0 && index < nextStates.length) {
-            nextStates[index] = getFloodPacketState(sample);
+
+          // Accumulate the first N replies, then freeze a median as this run's
+          // reference point. Everything before that can't be judged yet.
+          let baseline = prev.baseline;
+          let baselineRtts = prev.baselineRtts;
+          if (baseline == null && !sample.timeout && sample.rtt_ms != null) {
+            baselineRtts = [...baselineRtts, sample.rtt_ms];
+            if (baselineRtts.length >= SPIKE_BASELINE_SAMPLES) {
+              baseline = medianOf(baselineRtts);
+            }
           }
+
+          if (index >= 0 && index < nextStates.length) {
+            nextStates[index] = getFloodPacketState(sample, baseline);
+            nextRtts[index] = sample.timeout ? null : sample.rtt_ms ?? null;
+          }
+
+          // The packets that arrived before the baseline existed were all
+          // recorded as normal; once there's something to compare against,
+          // score them properly. One-time pass on the sample that fixes it.
+          if (baseline != null && prev.baseline == null) {
+            for (let i = 0; i < nextStates.length; i += 1) {
+              if (nextStates[i] === 'pending' || nextStates[i] === 'failed') continue;
+              nextStates[i] = classifyRtt(nextRtts[i], baseline);
+            }
+          }
+
           const received = nextStates.filter((state) => state !== 'failed' && state !== 'pending').length;
           const sent = nextStates.filter((state) => state !== 'pending').length;
           const lost = Math.max(sent - received, 0);
           const lossPct = sent > 0 ? Number(((lost * 100) / sent).toFixed(2)) : 0;
-          const jitterCount = nextStates.filter((state) => state === 'jitter').length;
-          const logType = sample.timeout ? 'failed' : sample.rtt_ms > 80 ? 'jitter' : 'success';
+          const logType = sample.timeout
+            ? 'failed'
+            : classifyRtt(sample.rtt_ms, baseline) === 'jitter'
+            ? 'jitter'
+            : 'success';
           const logText = sample.timeout
             ? `[${sample.timestamp}] seq=${sample.seq} timeout`
             : `[${sample.timestamp}] seq=${sample.seq} rtt=${sample.rtt_ms}ms`;
@@ -96,8 +208,19 @@ export default function FloodTestTab({ addNotification }) {
             received,
             lost,
             lossPct,
-            jitterCount,
+            baseline,
+            baselineRtts,
             packetStates: nextStates,
+            rtts: nextRtts,
+            samples: [
+              ...prev.samples,
+              {
+                seq: sample.seq,
+                rtt: sample.timeout ? null : sample.rtt_ms ?? null,
+                timeout: Boolean(sample.timeout),
+                timestamp: sample.timestamp,
+              },
+            ],
             logLines: [...prev.logLines, makeLine(logType, logText)].slice(-700)
           };
         });
@@ -134,6 +257,9 @@ export default function FloodTestTab({ addNotification }) {
         addNotification?.(
           'flood_complete',
           `Flood test to ${hostRef.current} complete — sent=${summary.sent}, recv=${summary.received}, loss=${summary.loss_pct}%`
+        );
+        setStatus(
+          `Flood test ${summary.status || 'complete'} — ${summary.loss_pct}% loss over ${summary.sent} pings.`
         );
         setRapidRunning(false);
       });
@@ -177,9 +303,13 @@ export default function FloodTestTab({ addNotification }) {
 
   const handleRapidPing = async () => {
     const host = floodHostInput.trim();
-    if (!host) return;
+    if (!host) {
+      setStatus('Enter a hostname or IP for the flood test.');
+      return;
+    }
     hostRef.current = host;
     setRapidRunning(true);
+    setStatus(`Running ${rapidCount}-ping flood test against ${host}...`);
     setRapidDetails({
       host,
       mode: 'ICMP',
@@ -187,7 +317,6 @@ export default function FloodTestTab({ addNotification }) {
       received: 0,
       lost: 0,
       lossPct: 0,
-      jitterCount: 0,
       avgLatency: null,
       minRtt: null,
       maxRtt: null,
@@ -195,7 +324,11 @@ export default function FloodTestTab({ addNotification }) {
       jitterMs: null,
       lossStreakMax: 0,
       status: 'working',
+      baseline: null,
+      baselineRtts: [],
       packetStates: Array.from({ length: rapidCount }, () => 'pending'),
+      rtts: Array.from({ length: rapidCount }, () => null),
+      samples: [],
       logLines: [
         makeLine('meta', `[init] Starting rapid ICMP test for ${host} (${rapidCount} pings)...`)
       ]
@@ -209,6 +342,7 @@ export default function FloodTestTab({ addNotification }) {
       });
       if (!startResult?.ok) {
         setRapidRunning(false);
+        setStatus(startResult?.error || 'Flood test failed to start.');
         setRapidDetails((prev) => ({
           ...prev,
           status: 'error',
@@ -217,32 +351,90 @@ export default function FloodTestTab({ addNotification }) {
             makeLine('failed', startResult?.error || 'Start failed.')
           ]
         }));
-      } else {
-        setFloodHostInput('');
       }
+      // The host stays in the box so the test can be re-run without retyping.
     } catch (error) {
+      const msg = String(error?.message || error);
       setRapidRunning(false);
+      setStatus(`Flood test error: ${msg}`);
       setRapidDetails((prev) => ({
         ...prev,
         status: 'error',
-        logLines: [
-          ...prev.logLines,
-          makeLine('failed', String(error?.message || error))
-        ]
+        logLines: [...prev.logLines, makeLine('failed', msg)]
       }));
     }
   };
 
   const handleRapidCancel = async () => {
     if (!rapidRunning) return;
-    try { await invoke('flood_cancel'); } catch (_) {}
+    try {
+      await invoke('flood_cancel');
+      setStatus('Cancelling flood test...');
+    } catch (_) {
+      setStatus('Could not cancel the flood test.');
+    }
+  };
+
+  const handleExportCsv = () => {
+    const { samples, host } = rapidDetails;
+    if (samples.length === 0) return;
+
+    const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+    const summaryCols = [
+      escapeCsv(host),
+      escapeCsv(new Date().toISOString()),
+      escapeCsv(rapidDetails.sent),
+      escapeCsv(rapidDetails.received),
+      escapeCsv(rapidDetails.lossPct),
+      escapeCsv(rapidDetails.avgLatency != null ? rapidDetails.avgLatency.toFixed(2) : ''),
+      escapeCsv(rapidDetails.minRtt != null ? rapidDetails.minRtt.toFixed(2) : ''),
+      escapeCsv(rapidDetails.maxRtt != null ? rapidDetails.maxRtt.toFixed(2) : ''),
+      escapeCsv(rapidDetails.p95Rtt != null ? rapidDetails.p95Rtt.toFixed(2) : ''),
+      escapeCsv(rapidDetails.jitterMs != null ? rapidDetails.jitterMs.toFixed(2) : ''),
+      escapeCsv(rapidDetails.lossStreakMax),
+    ];
+
+    const rows = [
+      [
+        'targetHost', 'exportedAt', 'sent', 'received', 'lossPct',
+        'avgRttMs', 'minRttMs', 'maxRttMs', 'p95RttMs', 'jitterMs', 'maxLossStreak',
+        'seq', 'timestamp', 'rttMs', 'timedOut',
+      ].join(','),
+    ];
+    samples.forEach((s) => {
+      rows.push(
+        [
+          ...summaryCols,
+          escapeCsv(s.seq),
+          escapeCsv(s.timestamp),
+          escapeCsv(s.rtt != null ? s.rtt.toFixed(2) : ''),
+          escapeCsv(s.timeout),
+        ].join(',')
+      );
+    });
+
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `netpulse-flood-${host || 'test'}-${Date.now()}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    setStatus(`Flood CSV exported — ${samples.length} samples.`);
   };
 
   const lossPct = Number(rapidDetails.lossPct || 0);
-  const donutBg =
-    lossPct === 0
-      ? 'var(--color-bg-control)'
-      : `conic-gradient(var(--color-danger) 0 ${Math.max(3, lossPct * 3.6)}deg, var(--color-bg-control) ${Math.max(3, lossPct * 3.6)}deg 360deg)`;
+  // Loss that matters lives in the 0.5–5% band, which a donut renders as an
+  // indistinguishable sliver — so the figure is the visual.
+  const lossSeverity = lossPct >= 5 ? 'critical' : lossPct >= 1 ? 'warn' : 'healthy';
+  const lossLabel = lossPct >= 5 ? 'Critical' : lossPct >= 1 ? 'Warning' : 'Stable';
+
+  const spikeRuleLabel =
+    rapidDetails.baseline != null
+      ? `Over ${SPIKE_RATIO}× this run's baseline of ${rapidDetails.baseline.toFixed(1)} ms`
+      : `Set once ${SPIKE_BASELINE_SAMPLES} replies have arrived — spikes are measured against this run's own baseline, not a fixed threshold`;
 
   return (
     <section className="packetloss-page">
@@ -254,6 +446,21 @@ export default function FloodTestTab({ addNotification }) {
             FLOOD DIAGNOSTICS
           </span>
           <h1>Packet Loss Test</h1>
+        </div>
+        <div className="page-header-actions" style={{ alignItems: 'center', gap: 8 }}>
+          {rapidDetails.host && (
+            <span className="run-state">
+              <span className={`status-light ${rapidRunning ? 'running' : 'idle'}`} />
+              {rapidDetails.host}
+            </span>
+          )}
+          <button
+            className="secondary"
+            onClick={handleExportCsv}
+            disabled={rapidDetails.samples.length === 0}
+          >
+            Export CSV
+          </button>
         </div>
       </div>
 
@@ -295,13 +502,10 @@ export default function FloodTestTab({ addNotification }) {
       <div className="packetloss-layout">
         {/* Left: Stats */}
         <aside className="packetloss-left">
-          <article className="loss-donut-card">
-            <div className="loss-donut" style={{ background: donutBg }}>
-              <div>
-                <strong>{lossPct.toFixed(1)}%</strong>
-                <span>Loss Rate</span>
-              </div>
-            </div>
+          <article className="loss-headline">
+            <span className="loss-headline-label">Loss Rate</span>
+            <strong className={lossSeverity}>{lossPct.toFixed(1)}%</strong>
+            <span className={`loss-headline-status ${lossSeverity}`}>{lossLabel}</span>
           </article>
 
           <article className="diag-metric">Total Sent <strong>{rapidDetails.sent}</strong></article>
@@ -327,6 +531,12 @@ export default function FloodTestTab({ addNotification }) {
                     rapidDetails.p95Rtt != null ? rapidDetails.p95Rtt.toFixed(2) : 'n/a'
                   } ms`
                 : 'n/a'}
+            </strong>
+          </article>
+          <article className="diag-metric" title={spikeRuleLabel}>
+            Spike Baseline{' '}
+            <strong>
+              {rapidDetails.baseline != null ? `${rapidDetails.baseline.toFixed(1)} ms` : 'n/a'}
             </strong>
           </article>
           <article className="diag-metric">
@@ -355,15 +565,24 @@ export default function FloodTestTab({ addNotification }) {
         {/* Right: Sequence + Log */}
         <section className="packetloss-right">
           <div className="sequence-head">
+            <h3>RTT Over Sequence</h3>
+            <div className="sequence-legend">
+              <span className="failed">Gaps = timeouts</span>
+            </div>
+          </div>
+
+          <FloodChart samples={rapidDetails.samples} />
+
+          <div className="sequence-head" style={{ marginTop: 16 }}>
             <h3>Sequence Analysis (Pings 1–{rapidCount})</h3>
             <div className="sequence-legend">
-              <span className="success">Success</span>
-              <span className="jitter">Jitter</span>
+              <span className="success">Normal</span>
+              <span className="jitter" title={spikeRuleLabel}>Spike</span>
               <span className="failed">Failed</span>
             </div>
           </div>
 
-          <SequenceGrid packetStates={rapidDetails.packetStates} />
+          <SequenceGrid packetStates={rapidDetails.packetStates} rtts={rapidDetails.rtts} />
 
           <section className="diag-log">
             <h4>Diagnostic Log</h4>

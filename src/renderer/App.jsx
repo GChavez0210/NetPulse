@@ -64,6 +64,10 @@ function App() {
 
   const clearNotifications = useCallback(() => setNotifications([]), []);
 
+  const dismissNotification = useCallback((id) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  }, []);
+
   return (
     <div className="app-shell">
       <TopNav
@@ -122,6 +126,7 @@ function App() {
           notifications={notifications}
           onClose={() => setShowNotifications(false)}
           onClear={clearNotifications}
+          onDismiss={dismissNotification}
         />
       )}
     </div>

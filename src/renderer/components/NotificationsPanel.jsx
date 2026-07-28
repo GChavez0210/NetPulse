@@ -14,7 +14,7 @@ function formatTs(ts) {
   });
 }
 
-export default function NotificationsPanel({ notifications, onClose, onClear }) {
+export default function NotificationsPanel({ notifications, onClose, onClear, onDismiss }) {
   return (
     <div className="notif-overlay" onClick={onClose}>
       <aside className="notif-panel" onClick={(e) => e.stopPropagation()}>
@@ -54,6 +54,17 @@ export default function NotificationsPanel({ notifications, onClose, onClear }) 
                     <span className="notif-text">{n.text}</span>
                     <span className="notif-ts">{formatTs(n.ts)}</span>
                   </div>
+                  <button
+                    type="button"
+                    className="notif-dismiss-btn"
+                    onClick={() => onDismiss?.(n.id)}
+                    title="Dismiss"
+                    aria-label="Dismiss notification"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
                 </li>
               );
             })}

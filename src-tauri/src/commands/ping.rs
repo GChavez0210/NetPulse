@@ -12,8 +12,20 @@ pub struct PingResult {
     pub ok: bool,
     pub host: String,
     pub latency_ms: Option<f64>,
+    pub ttl: Option<u32>,
     pub output: String,
     pub error: Option<String>,
+}
+
+/// Parse the TTL of the reply. Windows prints "TTL=117", Unix "ttl=117".
+/// A TTL that shifts between samples means the path length changed — the
+/// route flipped, or an anycast target moved — so it's worth surfacing.
+fn parse_ttl(output: &str) -> Option<u32> {
+    let lower = output.to_lowercase();
+    let pos = lower.find("ttl=")?;
+    let after = &lower[pos + 4..];
+    let num_str: String = after.chars().take_while(|c| c.is_ascii_digit()).collect();
+    num_str.parse::<u32>().ok()
 }
 
 /// Parse a single-reply RTT from ping output (used by ping_sample and flood helper).
@@ -109,6 +121,7 @@ pub async fn ping_run(host: String) -> Result<PingResult, String> {
                 ok: false,
                 host,
                 latency_ms: None,
+                ttl: None,
                 output: String::new(),
                 error: Some("Ping timed out after 10 seconds".to_string()),
             })
@@ -122,10 +135,13 @@ pub async fn ping_run(host: String) -> Result<PingResult, String> {
     let ok = has_reply(&combined);
     let latency_ms = if ok { parse_avg_rtt(&combined) } else { None };
 
+    let ttl = if ok { parse_ttl(&combined) } else { None };
+
     Ok(PingResult {
         ok,
         host,
         latency_ms,
+        ttl,
         output: combined,
         error: if ok { None } else { Some("No reply received".to_string()) },
     })
@@ -187,6 +203,7 @@ pub async fn ping_sample(
                 ok: false,
                 host,
                 latency_ms: None,
+                ttl: None,
                 output: String::new(),
                 error: Some("Request timed out".to_string()),
             })
@@ -199,11 +216,13 @@ pub async fn ping_sample(
 
     let rtt = parse_single_rtt(&combined);
     let ok = rtt.is_some();
+    let ttl = if ok { parse_ttl(&combined) } else { None };
 
     Ok(PingResult {
         ok,
         host,
         latency_ms: rtt,
+        ttl,
         output: combined,
         error: if ok { None } else { Some("Request timed out".to_string()) },
     })

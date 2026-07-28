@@ -10,7 +10,8 @@ import {
   DOWN_THRESHOLD,
   MAX_POINTS,
   HEALTH_WINDOW,
-  getHealth,
+  getHealthReason,
+  formatHealthReason,
   getTestMetrics,
   createTest,
   parseIntOrDefault,
@@ -94,6 +95,10 @@ function pingReducer(tests, action) {
         const nextEvents = [...test.events];
         if (becameUp) nextEvents.push({ id: `${nowTs}-up`, ts: nowTs, kind: 'up' });
         if (becameDown) nextEvents.push({ id: `${nowTs}-down`, ts: nowTs, kind: 'down' });
+        // A reply TTL that shifts means the packet took a different-length path.
+        // Only compare successful replies — a timeout has no TTL to speak of.
+        const ttl = isSuccess && result.ttl != null ? result.ttl : null;
+        const ttlChanged = ttl != null && test.lastTtl != null && ttl !== test.lastTtl;
         return {
           ...test,
           reachable,
@@ -104,6 +109,9 @@ function pingReducer(tests, action) {
           sent: test.sent + 1,
           received: test.received + (isSuccess ? 1 : 0),
           lastLatency: isSuccess ? result.latency_ms : null,
+          lastTtl: ttl ?? test.lastTtl,
+          prevTtl: ttlChanged ? test.lastTtl : test.prevTtl,
+          ttlChanges: test.ttlChanges + (ttlChanged ? 1 : 0),
           lastOutput: result.output || 'No output.',
         };
       });
@@ -376,12 +384,23 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
   const exportSession = () => {
     const rows = tests.map((t) => {
       const m = getTestMetrics(t);
-      const health = getHealth(t);
       const loss = t.sent > 0 ? ((t.sent - t.received) / t.sent * 100).toFixed(2) : '0.00';
-      const healthLabel = health === 'down' ? 'TIMEOUT' : health === 'degraded' ? 'JITTER' : 'STABLE';
-      return [t.alias || t.host, t.host, m.avg?.toFixed(1) ?? '--', m.max?.toFixed(1) ?? '--', loss, healthLabel].join(',');
+      const healthLabel = formatHealthReason(getHealthReason(t, m));
+      return [
+        t.alias || t.host,
+        t.host,
+        m.avg?.toFixed(1) ?? '--',
+        m.max?.toFixed(1) ?? '--',
+        loss,
+        healthLabel,
+        t.lastTtl ?? '--',
+        t.ttlChanges ?? 0,
+      ].join(',');
     });
-    const csv = ['Alias,Host,Avg RTT (ms),Max RTT (ms),Loss %,Status', ...rows].join('\n');
+    const csv = [
+      'Alias,Host,Avg RTT (ms),Max RTT (ms),Loss %,Status,Reply TTL,TTL Changes',
+      ...rows,
+    ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

@@ -19,23 +19,55 @@ export const HEALTH = {
   UNKNOWN: 'unknown'
 };
 
-export function getHealth(test) {
-  if (test.reachable === false) return HEALTH.DOWN;
+// Why a target is degraded, as distinct from how badly. Both LOSS and JITTER
+// are the same severity — they differ in what's actually wrong, which is what
+// the card label needs to say.
+export const HEALTH_REASON = {
+  UNREACHABLE: 'unreachable',
+  LOSS: 'loss',
+  JITTER: 'jitter'
+};
+
+// Jitter measured as spread relative to the average, so the rule holds on a
+// 2 ms LAN and a 600 ms satellite link alike; the floor keeps sub-millisecond
+// wobble on fast links from tripping it. Mirrors the flood tab's spike rule.
+export const JITTER_RATIO = 0.3;
+export const JITTER_FLOOR_MS = 5;
+
+export function isJittery(metrics) {
+  if (!metrics || metrics.avg == null || metrics.stddev == null) return false;
+  return metrics.stddev >= JITTER_FLOOR_MS && metrics.stddev > JITTER_RATIO * metrics.avg;
+}
+
+// `metrics` is optional — callers that already computed it can pass it in
+// rather than paying for getTestMetrics twice per render.
+export function getHealthReason(test, metrics) {
+  if (test.reachable === false) return HEALTH_REASON.UNREACHABLE;
 
   const recent = test.recentResults || [];
   const lossPct =
     recent.length > 0 ? (recent.filter((ok) => !ok).length * 100) / recent.length : 0;
-  if (test.failureStreak > 0 || lossPct > 0) return HEALTH.DEGRADED;
+  // Loss outranks jitter: a dropped packet is the more serious finding, and
+  // reporting it as jitter is what made the old label wrong.
+  if (test.failureStreak > 0 || lossPct > 0) return HEALTH_REASON.LOSS;
 
+  if (isJittery(metrics ?? getTestMetrics(test))) return HEALTH_REASON.JITTER;
+  return null;
+}
+
+export function getHealth(test, metrics) {
+  const reason = getHealthReason(test, metrics);
+  if (reason === HEALTH_REASON.UNREACHABLE) return HEALTH.DOWN;
+  if (reason) return HEALTH.DEGRADED;
   if (test.reachable === true) return HEALTH.NORMAL;
   return HEALTH.UNKNOWN;
 }
 
-export function formatHealthLabel(health) {
-  if (health === HEALTH.NORMAL) return 'Normal';
-  if (health === HEALTH.DEGRADED) return 'Degraded';
-  if (health === HEALTH.DOWN) return 'Down';
-  return 'No data';
+export function formatHealthReason(reason) {
+  if (reason === HEALTH_REASON.UNREACHABLE) return 'TIMEOUT';
+  if (reason === HEALTH_REASON.LOSS) return 'LOSS';
+  if (reason === HEALTH_REASON.JITTER) return 'JITTER';
+  return 'STABLE';
 }
 
 export function getQueryType(text = '') {
@@ -220,10 +252,34 @@ export function buildWhoisPresentation(dataWrapper, domain) {
   return { lines, text, queryDomain };
 }
 
-export function getFloodPacketState(sample) {
+// A packet is a spike when it is well above this run's own baseline, not above
+// a fixed millisecond count: 80 ms is unremarkable on a satellite link and a
+// serious excursion on a LAN. The ratio makes the rule scale-free; the floor
+// stops sub-millisecond wobble on very fast links from flagging constantly.
+export const SPIKE_RATIO = 2;
+export const SPIKE_FLOOR_MS = 5;
+// Replies sampled before the baseline is fixed. Frozen rather than rolling so
+// a long degradation can't drag the baseline up to meet itself.
+export const SPIKE_BASELINE_SAMPLES = 20;
+
+export function medianOf(values) {
+  if (!values || values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+}
+
+/// Classify one reply against the run baseline. Until the baseline exists there
+/// is nothing to compare against, so replies read as normal.
+export function classifyRtt(rtt, baseline) {
+  if (rtt == null) return 'success';
+  if (baseline == null) return 'success';
+  return rtt > baseline * SPIKE_RATIO && rtt - baseline >= SPIKE_FLOOR_MS ? 'jitter' : 'success';
+}
+
+export function getFloodPacketState(sample, baseline) {
   if (!sample || sample.timeout) return 'failed';
-  if (sample.rtt_ms != null && sample.rtt_ms > 80) return 'jitter';
-  return 'success';
+  return classifyRtt(sample.rtt_ms, baseline);
 }
 
 export function createTest(host) {
@@ -240,6 +296,10 @@ export function createTest(host) {
     sent: 0,
     received: 0,
     lastLatency: null,
+    lastTtl: null,
+    // Retained across samples so a change in path length can be flagged.
+    prevTtl: null,
+    ttlChanges: 0,
     lastOutput: 'Initializing extended ping test...',
     viewMode: 'graph',
     events: []
