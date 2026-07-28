@@ -5,6 +5,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and thi
 
 ---
 
+## [0.5.5] — 2026-07-28
+
+Per-tool reset controls, reply-TTL monitoring, and corrections to three diagnostics that were reporting the wrong thing.
+
+### Added
+- **Clear buttons on every Diagnostics and Recon tool:** Each of the 15 tool cards now has a trash-icon button that resets just that tool — inputs back to their defaults and results cleared. Disabled while a tool is running or when there is nothing to clear.
+- **Reply TTL (Ping tab):** Ping replies now surface their TTL alongside an estimated hop count. A TTL that changes between samples is flagged, since it means the path length shifted — route flapping or an anycast change. Exported to CSV as `Reply TTL` and `TTL Changes`.
+- **RTT-over-sequence chart (Flood Test):** Plots latency across the run, with the line breaking at dropped packets rather than drawing through them. Reveals patterns a grid of squares cannot — bufferbloat ramps, periodic spikes, mid-run step changes.
+- **CSV export (Flood Test):** Exports every sample with sequence number, timestamp, RTT, and timeout flag, alongside the run summary. Previously the tab generating the richest dataset was the only one with no way to get it out.
+- **Per-notification dismiss:** Notifications can be cleared individually, not only via Clear All.
+- **Tooltips on flood sequence cells** reporting each packet's sequence number and RTT.
+- **Spike Baseline metric (Flood Test)** showing the reference RTT that spike detection is measured against.
+
+### Changed
+- **Traceroute summary replaced "Average RTT"** with *To Destination* (last responding hop) and *Worst Jump* (largest hop-to-hop delta, labeled with its hop). Averaging cumulative per-hop RTTs produced a figure that described nothing physical and understated real latency. Each hop row now also shows its own delta, and the worst-jump hop is highlighted.
+- **Traceroute latency bars scale to the slowest hop in the run** instead of a fixed 180 ms ceiling, which pegged every bar at 100% on any long-distance route.
+- **Tool inputs persist** across runs in Diagnostics, Recon, Traceroute, and Flood Test. Previously a successful run cleared the input, discarding what you had typed.
+- **Flood Test loss rate** is now a large figure rather than a donut, which rendered the meaningful 0.5–5% range as an indistinguishable sliver.
+- **Flood Test shows the target host** in the results header.
+
+### Fixed
+- **Traceroute "Rerun" did nothing after a successful run.** The input was cleared on success, so Rerun immediately failed its own empty-host check. Exported CSVs also recorded an empty `targetHost` for the same reason.
+- **Timed-out traceroute hops rendered as a full-width red bar,** reading as the worst latency in the route when they actually mean no data was collected. They now render as a hatched empty track.
+- **Ping cards labeled packet loss as "JITTER".** The health check never examined latency variance at all — any lost packet produced a jitter verdict. Loss and jitter are now distinguished: `LOSS`, `JITTER`, `TIMEOUT`, or `STABLE`, with jitter measured from actual latency spread. CSV exports carry the corrected labels.
+- **Flood Test classified packets against a fixed 80 ms threshold,** which flagged every packet on a satellite link and no packet on a LAN. Packets are now compared against the run's own baseline (median of the first 20 replies), so a 40 ms spike on a 1 ms LAN registers and a steady 600 ms satellite link does not. The legend now reads *Spike* rather than reusing "Jitter", which the adjacent Jitter/P95 metric already means in the statistical sense.
+- **Flood Test gave no feedback** on export, cancel, or start failure — its status toast was rendered but never populated.
+
+### Removed
+- Dead code: an unused `jitterCount` recomputed over the full packet array on every sample, and `formatHealthLabel`, which returned a third conflicting label for the ping health state.
+
+---
+
 ## [0.5.4] — 2026-07-18
 
 New ISP-oriented diagnostics tools, a reorganized Diagnostics/Recon layout, and a real-data bug fix.
