@@ -7,9 +7,6 @@
   <a href="https://github.com/GChavez0210/NetPulse/releases">
     <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue" alt="Platforms">
   </a>
-  <a href="https://buymeacoffee.com/gchavez0210">
-    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=000000" alt="Buy Me A Coffee">
-  </a>
 </p>
 
 <p align="center">
@@ -160,20 +157,6 @@ Requires:
 - Node.js 18+
 - Rust (stable)
 - Tauri 2
-
----
-
-## Support NetPulse
-
-NetPulse is an independent open-source project developed and maintained during personal time.
-
-If NetPulse helps with your day-to-day troubleshooting, network operations, or learning journey, consider supporting continued development.
-
-<p align="center">
-  <a href="https://buymeacoffee.com/gchavez0210">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="220">
-  </a>
-</p>
 
 ---
 
