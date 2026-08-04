@@ -5,6 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and thi
 
 ---
 
+## [0.6.0] — 2026-08-04
+
+A new Console tab: interactive terminal access to network devices over SSH, Telnet, and a serial console cable.
+
+### Added
+- **Console tab:** Pick a transport, fill in the connection details, and get a live terminal. Built on xterm.js, so full-screen remote programs — `vim`, `top`, paged `show run` — render properly rather than as escape-sequence noise. Output is carried as raw bytes end to end, so multi-byte UTF-8 characters split across packet boundaries are reassembled instead of corrupted.
+- **SSH transport:** Password and OpenSSH private-key authentication, a proper PTY (`xterm-256color`) that tracks the window size, and keepalives. Host keys are verified against a standard OpenSSH `known_hosts` file in the app data directory: a first-time key prompts for confirmation with its SHA-256 fingerprint, and a key that has *changed* is refused outright with no override — that case is what host-key checking exists to catch.
+- **Telnet transport:** Full option negotiation (ECHO, SUPPRESS-GO-AHEAD, TERMINAL-TYPE, NAWS) so window size and terminal type reach the device, with literal `0xFF` bytes escaped correctly in both directions. Reachable devices on non-standard ports are supported via the TCP port field — console servers commonly sit on 2001–2048 rather than 23.
+- **Serial transport:** The path to a switch that has no IP address yet. The port dropdown lists adapters by manufacturer and product (`COM3 — FTDI FT232R USB UART`) rather than bare device paths, with a refresh button, since USB-serial adapters are plugged in and out constantly. Defaults to 9600 8N1, correct for essentially all network gear; data bits, parity, stop bits, and flow control are available under advanced settings.
+- **Multiple concurrent sessions** (up to 16) as renameable tabs, each with its own terminal and scrollback. Sessions stay live while you work in other NetPulse tabs.
+- **Terminal tools:** search across scrollback, copy selection, clear, and export the session transcript to a text file.
+- **Allow legacy SSH algorithms:** An opt-in toggle that adds `diffie-hellman-group14-sha1`, `ssh-rsa`, CBC ciphers, and HMAC-SHA1 for older Cisco and HPE equipment that offers nothing newer. Modern algorithms stay ahead of the legacy fallbacks in the preference order, so it only widens what NetPulse will accept rather than downgrading connections that do not need it.
+- **Local echo toggle (serial)** for devices that do not echo typed characters.
+
+### Security
+- Credentials are held in memory only and are never written to `settings.json` or anywhere else on disk. Passwords are zeroized after authentication, and the connection form is cleared once a session is established.
+- Telnet is labeled in the UI as sending all traffic, including credentials, in cleartext.
+- Console input is bounded (64 KB per chunk) and terminal dimensions are range-checked before reaching a transport.
+
+### Fixed
+- **SSH private-key authentication could never succeed.** The connect form takes pasted key material, but the backend passed that text to a loader that expects a filesystem path, so every key-based login failed with a file-not-found error. Pasted keys are now decoded directly, and a failure to read one says whether a passphrase is likely needed.
+- **The remote terminal stayed 80×24 on the first session of a run,** regardless of the window size. The size measurement happened while the session was still connecting and had nowhere to report to, and nothing re-sent it afterwards — so full-screen output wrapped at 80 columns inside a much wider window until the app was manually resized.
+
+### Build
+- `libudev-dev` added to the Linux release build, required for USB serial-port enumeration.
+
+---
+
 ## [0.5.5] — 2026-07-28
 
 Per-tool reset controls, reply-TTL monitoring, and corrections to three diagnostics that were reporting the wrong thing.

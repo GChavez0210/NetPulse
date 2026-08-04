@@ -193,6 +193,26 @@ fn legacy_preferences() -> Preferred {
     preferred
 }
 
+/// Decodes pasted OpenSSH/PKCS#8 private-key text into a usable key.
+///
+/// A wrong or missing passphrase surfaces as a generic crypto error, so it is
+/// translated into advice the operator can act on.
+fn decode_private_key(
+    private_key: &str,
+    passphrase: Option<&str>,
+) -> Result<russh::keys::PrivateKey, String> {
+    let passphrase = passphrase.filter(|value| !value.is_empty());
+    russh::keys::decode_secret_key(private_key.trim(), passphrase).map_err(|error| {
+        if passphrase.is_none() {
+            format!(
+                "Could not load the SSH private key: {error}. If the key is encrypted, enter its passphrase."
+            )
+        } else {
+            format!("Could not load the SSH private key: {error}. Check the key text and passphrase.")
+        }
+    })
+}
+
 fn describe_connect_error(error: &russh::Error, legacy_algos: bool) -> String {
     let detail = error.to_string();
     let lower = detail.to_lowercase();
@@ -299,17 +319,17 @@ pub async fn connect(
                 .map_err(|error| format!("SSH authentication failed: {error}"))?
         }
         SshAuth::Key {
-            private_key,
+            mut private_key,
             mut passphrase,
         } => {
             if private_key.trim().is_empty() {
-                return Err("SSH private-key path must not be empty.".into());
+                return Err("SSH private key must not be empty.".into());
             }
-            let key = russh::keys::load_secret_key(
-                private_key.trim(),
-                passphrase.as_deref().filter(|value| !value.is_empty()),
-            )
-            .map_err(|error| format!("Could not load the SSH private key: {error}"))?;
+            // The form supplies the key material itself, so decode it in place.
+            // `load_secret_key` takes a filesystem path and would try to open
+            // the pasted PEM text as a file name.
+            let key = decode_private_key(&private_key, passphrase.as_deref())?;
+            private_key.zeroize();
             if let Some(value) = passphrase.as_mut() {
                 value.zeroize();
             }
@@ -373,6 +393,32 @@ mod tests {
         assert_eq!(drain_pending(&mut pending, &mut buffer), 3);
         assert_eq!(buffer, [0xff, 0x00, 0xf0]);
         assert_eq!(pending, VecDeque::from([0x9f]));
+    }
+
+    /// RFC 8410 §10.3 sample key — a published test vector, not a real secret.
+    const RFC8410_ED25519_KEY: &str = "-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEINTuctv5E1hK1bbY8fdp+K06/nwoy/HU++CXqI9EdVhC
+-----END PRIVATE KEY-----";
+
+    #[test]
+    fn private_key_auth_accepts_pasted_key_material_not_a_path() {
+        // The connect form supplies key text, so decoding must work on the
+        // material itself; a path-based loader would fail here.
+        let key = decode_private_key(RFC8410_ED25519_KEY, None).expect("pasted key should decode");
+        assert_eq!(key.algorithm(), russh::keys::Algorithm::Ed25519);
+
+        // Surrounding whitespace from a copy/paste must not break decoding.
+        let padded = format!("\n  {RFC8410_ED25519_KEY}\n");
+        assert!(decode_private_key(&padded, None).is_ok());
+
+        // An empty passphrase is treated as "no passphrase", not a wrong one.
+        assert!(decode_private_key(RFC8410_ED25519_KEY, Some("")).is_ok());
+    }
+
+    #[test]
+    fn unreadable_private_key_explains_the_passphrase_option() {
+        let error = decode_private_key("not a key", None).unwrap_err();
+        assert!(error.contains("passphrase"), "unexpected error: {error}");
     }
 
     #[test]

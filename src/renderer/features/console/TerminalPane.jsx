@@ -145,7 +145,10 @@ const TerminalPane = forwardRef(function TerminalPane({
       observer.disconnect();
       window.removeEventListener('resize', scheduleFit);
     };
-  }, [isActive]);
+    // `sessionId` is a dependency so the size is re-sent once the backend
+    // session exists. The fit that runs while connecting has no session to
+    // report to, and nothing else would resize the remote PTY afterwards.
+  }, [isActive, sessionId]);
 
   const find = (direction) => {
     if (!search) return;
