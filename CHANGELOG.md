@@ -18,15 +18,14 @@ A new Console tab: interactive terminal access to network devices over SSH, Teln
 - **Terminal tools:** search across scrollback, copy selection, clear, and export the session transcript to a text file.
 - **Allow legacy SSH algorithms:** An opt-in toggle that adds `diffie-hellman-group14-sha1`, `ssh-rsa`, CBC ciphers, and HMAC-SHA1 for older Cisco and HPE equipment that offers nothing newer. Modern algorithms stay ahead of the legacy fallbacks in the preference order, so it only widens what NetPulse will accept rather than downgrading connections that do not need it.
 - **Local echo toggle (serial)** for devices that do not echo typed characters.
+- **Reconnect** on a session whose connection dropped unexpectedly. A clean logout is recognized as such and does not offer one.
 
 ### Security
 - Credentials are held in memory only and are never written to `settings.json` or anywhere else on disk. Passwords are zeroized after authentication, and the connection form is cleared once a session is established.
+- SSH credentials are kept outside React component state and are discarded as soon as a session can no longer need them — on a clean logout, a deliberate disconnect, a closed tab, or leaving the app. Only a session that dropped unexpectedly retains them, so that reconnecting does not require retyping; anything else goes back through the connection form.
 - Telnet is labeled in the UI as sending all traffic, including credentials, in cleartext.
 - Console input is bounded (64 KB per chunk) and terminal dimensions are range-checked before reaching a transport.
-
-### Fixed
-- **SSH private-key authentication could never succeed.** The connect form takes pasted key material, but the backend passed that text to a loader that expects a filesystem path, so every key-based login failed with a file-not-found error. Pasted keys are now decoded directly, and a failure to read one says whether a passphrase is likely needed.
-- **The remote terminal stayed 80×24 on the first session of a run,** regardless of the window size. The size measurement happened while the session was still connecting and had nowhere to report to, and nothing re-sent it afterwards — so full-screen output wrapped at 80 columns inside a much wider window until the app was manually resized.
+- Disconnecting closes the transport politely — SSH sends a disconnect message, Telnet a FIN — instead of dropping the socket and leaving the peer to time the session out. An unresponsive close is abandoned after three seconds so the socket or serial port is always released.
 
 ### Build
 - `libudev-dev` added to the Linux release build, required for USB serial-port enumeration.

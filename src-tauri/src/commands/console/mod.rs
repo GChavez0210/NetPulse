@@ -19,6 +19,8 @@ use transport::Transport;
 const MAX_INPUT_CHUNK: usize = 64 * 1024;
 const MAX_TERMINAL_DIMENSION: u16 = 1_000;
 const MAX_CONSOLE_SESSIONS: usize = 16;
+/// How long a polite transport close may take before the pump is dropped.
+const SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
 
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -48,6 +50,9 @@ pub enum ConsoleEvent {
     },
     Closed {
         reason: String,
+        /// Whether the peer went away unexpectedly. A clean logout or a
+        /// caller-initiated close is not worth offering a reconnect for.
+        recoverable: bool,
     },
 }
 
@@ -90,11 +95,12 @@ pub enum ConnectParams {
 enum SessionCommand {
     Data(Vec<u8>),
     Resize { cols: u16, rows: u16 },
+    Close,
 }
 
 pub struct ConsoleSession {
     tx: mpsc::Sender<SessionCommand>,
-    abort: tokio::task::AbortHandle,
+    task: tokio::task::JoinHandle<()>,
     pub kind: TransportKind,
     pub label: String,
 }
@@ -150,7 +156,6 @@ where
         run_session(transport, rx, &send_event).await;
         task_sessions.lock().await.remove(&task_session_id);
     });
-    let abort = task.abort_handle();
 
     let mut registry = sessions.lock().await;
     if registry.contains_key(&session_id) {
@@ -161,7 +166,7 @@ where
         session_id,
         ConsoleSession {
             tx,
-            abort,
+            task,
             kind,
             label,
         },
@@ -192,6 +197,7 @@ async fn run_session<T, F>(
                         if let Err(error) = transport.write_all(&bytes).await {
                             send_event(ConsoleEvent::Closed {
                                 reason: format!("Console write failed: {error}"),
+                                recoverable: true,
                             });
                             break;
                         }
@@ -206,10 +212,19 @@ async fn run_session<T, F>(
                             }
                         }
                     }
+                    Some(SessionCommand::Close) => {
+                        // Close politely so SSH sends a disconnect message and
+                        // Telnet a FIN, rather than the peer seeing the socket
+                        // vanish. The caller already moved this session to a
+                        // disconnected state, so no Closed event is emitted.
+                        let _ = transport.shutdown().await;
+                        break;
+                    }
                     None => {
                         let _ = transport.shutdown().await;
                         send_event(ConsoleEvent::Closed {
                             reason: "The console controller closed.".into(),
+                            recoverable: false,
                         });
                         break;
                     }
@@ -218,8 +233,10 @@ async fn run_session<T, F>(
             result = transport.read(&mut read_buffer) => {
                 match result {
                     Ok(0) => {
+                        // A clean end-of-stream is a normal logout, not a fault.
                         send_event(ConsoleEvent::Closed {
                             reason: "The remote console closed the connection.".into(),
+                            recoverable: false,
                         });
                         break;
                     }
@@ -233,6 +250,7 @@ async fn run_session<T, F>(
                     Err(error) => {
                         send_event(ConsoleEvent::Closed {
                             reason: format!("Console read failed: {error}"),
+                            recoverable: true,
                         });
                         break;
                     }
@@ -433,11 +451,32 @@ pub async fn console_resize(
         .map_err(|_| "The console session is already closed.".to_string())
 }
 
+/// Closes a session's transport politely, falling back to dropping it outright.
+///
+/// The pump owns the transport, so the close has to happen there. If it does
+/// not finish within `grace` — a wedged OS call, an unresponsive peer — the
+/// task is aborted, which drops the transport and releases the socket or port.
+async fn close_session(session: ConsoleSession, grace: std::time::Duration) {
+    let ConsoleSession { tx, task, .. } = session;
+    let abort = task.abort_handle();
+
+    if tx.send(SessionCommand::Close).await.is_ok() {
+        drop(tx);
+        if tokio::time::timeout(grace, task).await.is_ok() {
+            return;
+        }
+    }
+
+    abort.abort();
+}
+
 #[tauri::command]
 pub async fn console_disconnect(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    // Remove first so the lock is released before awaiting the pump, which
+    // takes the same lock to deregister itself when it finishes.
     let session = state
         .console_sessions
         .lock()
@@ -445,10 +484,7 @@ pub async fn console_disconnect(
         .remove(&session_id)
         .ok_or_else(|| format!("Console session '{session_id}' was not found."))?;
 
-    // Aborting drops the owned transport immediately, even if its read/write
-    // future is stalled in an OS call. The frontend already initiated this
-    // lifecycle transition and does not need a redundant Closed event.
-    session.abort.abort();
+    close_session(session, SHUTDOWN_GRACE).await;
     Ok(())
 }
 
@@ -459,13 +495,21 @@ mod tests {
     use std::sync::Mutex as StdMutex;
     use tokio::time::{timeout, Duration};
 
+    #[derive(Default)]
     struct TestTransport {
         reads: VecDeque<Vec<u8>>,
         writes: Arc<StdMutex<Vec<Vec<u8>>>>,
         closed: bool,
+        shutdowns: Arc<std::sync::atomic::AtomicUsize>,
     }
 
     impl Transport for TestTransport {
+        fn shutdown(&mut self) -> impl std::future::Future<Output = Result<(), String>> + Send {
+            self.shutdowns
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            async { Ok(()) }
+        }
+
         fn read<'a>(
             &'a mut self,
             buffer: &'a mut [u8],
@@ -502,7 +546,7 @@ mod tests {
         let transport = TestTransport {
             reads: VecDeque::from([outbound.clone()]),
             writes: writes.clone(),
-            closed: false,
+            ..Default::default()
         };
         let events = Arc::new(StdMutex::new(Vec::new()));
         let captured = events.clone();
@@ -558,9 +602,8 @@ mod tests {
     async fn closed_transport_removes_the_registry_entry() {
         let sessions = Arc::new(Mutex::new(HashMap::new()));
         let transport = TestTransport {
-            reads: VecDeque::new(),
-            writes: Arc::new(StdMutex::new(Vec::new())),
             closed: true,
+            ..Default::default()
         };
         register_transport_with_sink(
             "2".into(),
@@ -584,6 +627,83 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn disconnect_closes_the_transport_politely_without_a_closed_event() {
+        let sessions = Arc::new(Mutex::new(HashMap::new()));
+        let shutdowns = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let events = Arc::new(StdMutex::new(Vec::new()));
+        let captured = events.clone();
+
+        register_transport_with_sink(
+            "3".into(),
+            TransportKind::Ssh,
+            "test".into(),
+            TestTransport {
+                shutdowns: shutdowns.clone(),
+                ..Default::default()
+            },
+            move |event| {
+                captured.lock().unwrap().push(event);
+                true
+            },
+            sessions.clone(),
+        )
+        .await
+        .unwrap();
+
+        let session = sessions.lock().await.remove("3").expect("session registered");
+        close_session(session, Duration::from_secs(5)).await;
+
+        // The transport was shut down rather than dropped mid-flight, and the
+        // caller is not told about a disconnect it asked for.
+        assert_eq!(shutdowns.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(
+            !events
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|event| matches!(event, ConsoleEvent::Closed { .. })),
+            "a caller-initiated disconnect should not emit a Closed event"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_clean_remote_logout_is_not_offered_as_recoverable() {
+        let sessions = Arc::new(Mutex::new(HashMap::new()));
+        let events = Arc::new(StdMutex::new(Vec::new()));
+        let captured = events.clone();
+
+        register_transport_with_sink(
+            "4".into(),
+            TransportKind::Ssh,
+            "test".into(),
+            TestTransport {
+                closed: true,
+                ..Default::default()
+            },
+            move |event| {
+                captured.lock().unwrap().push(event);
+                true
+            },
+            sessions.clone(),
+        )
+        .await
+        .unwrap();
+
+        timeout(Duration::from_secs(1), async {
+            while events.lock().unwrap().is_empty() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+
+        let ConsoleEvent::Closed { recoverable, .. } = &events.lock().unwrap()[0] else {
+            panic!("expected a closed event");
+        };
+        assert!(!recoverable, "end-of-stream is a logout, not a fault");
+    }
+
+    #[tokio::test]
     async fn multiple_sessions_keep_their_input_isolated() {
         let sessions = Arc::new(Mutex::new(HashMap::new()));
         let first_writes = Arc::new(StdMutex::new(Vec::new()));
@@ -598,9 +718,8 @@ mod tests {
                 TransportKind::Telnet,
                 id.into(),
                 TestTransport {
-                    reads: VecDeque::new(),
                     writes,
-                    closed: false,
+                    ..Default::default()
                 },
                 |_| true,
                 sessions.clone(),

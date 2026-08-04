@@ -4,7 +4,13 @@ import ConnectForm from './ConnectForm';
 import HostKeyPrompt from './HostKeyPrompt';
 import SessionTabs from './SessionTabs';
 import TerminalPane from './TerminalPane';
-import { canReconnectAfterError, defaultSessionName } from './sessionLifecycle.mjs';
+import {
+  canReconnectAfterError,
+  defaultSessionName,
+  needsForgottenSecret,
+  splitSecret,
+  withSecret,
+} from './sessionLifecycle.mjs';
 
 const encoder = new TextEncoder();
 
@@ -48,15 +54,22 @@ export default function ConsoleTab({ isActive }) {
   const nextClientKey = useRef(1);
   const pendingConnectRef = useRef(null);
   const hostKeyRef = useRef(null);
+  // SSH credentials live here rather than in session state, and only for as
+  // long as a session could still need them to reconnect.
+  const secretsRef = useRef(new Map());
 
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
 
-  useEffect(() => () => {
-    sessionsRef.current.forEach((session) => {
-      if (session.id) invoke('console_disconnect', { sessionId: session.id }).catch(() => {});
-    });
+  useEffect(() => {
+    const secrets = secretsRef.current;
+    return () => {
+      sessionsRef.current.forEach((session) => {
+        if (session.id) invoke('console_disconnect', { sessionId: session.id }).catch(() => {});
+      });
+      secrets.clear();
+    };
   }, []);
 
   const updateSession = useCallback((key, changes) => {
@@ -108,13 +121,19 @@ export default function ConsoleTab({ isActive }) {
       return;
     }
     if (event.type === 'closed') {
+      // A clean logout is not a fault and is not worth offering a reconnect
+      // for; the backend distinguishes it from a connection that dropped.
+      const recoverable = Boolean(event.recoverable);
+      if (!recoverable) secretsRef.current.delete(key);
       updateSession(key, {
         id: null,
-        state: 'interrupted',
-        canReconnect: true,
-        status: { level: 'down', message: event.reason },
+        state: recoverable ? 'interrupted' : 'closed',
+        canReconnect: recoverable,
+        status: { level: recoverable ? 'down' : 'idle', message: event.reason },
       });
-      writeToTerminal(key, (terminal) => terminal.writeln(`\r\n\x1b[31m${event.reason}\x1b[0m`));
+      writeToTerminal(key, (terminal) => terminal.writeln(
+        recoverable ? `\r\n\x1b[31m${event.reason}\x1b[0m` : `\r\n\x1b[2m${event.reason}\x1b[0m`,
+      ));
     }
   }, [updateSession, writeToTerminal]);
 
@@ -124,7 +143,12 @@ export default function ConsoleTab({ isActive }) {
       || sessionsRef.current.find((session) => session.key === existingKey)?.state === 'awaitingTrust';
     const initialStatus = { level: 'running', message: `Connecting via ${params.kind.toUpperCase()}…` };
 
-    pendingConnectRef.current = { key, params, options };
+    // Credentials go to the ref, never into session state or the pending-connect
+    // record. `params` itself stays a local and is released with this call.
+    const { safeParams, secret } = splitSecret(params);
+    if (secret) secretsRef.current.set(key, secret);
+
+    pendingConnectRef.current = { key, params: safeParams, options };
     hostKeyRef.current = null;
     setHostKey(null);
     setConnecting(true);
@@ -135,7 +159,7 @@ export default function ConsoleTab({ isActive }) {
         state: 'connecting',
         status: initialStatus,
         canReconnect: false,
-        params,
+        params: safeParams,
         options,
       });
       writeToTerminal(key, (terminal) => terminal.writeln(`\r\n\x1b[2mReconnecting via ${params.kind.toUpperCase()}…\x1b[0m`));
@@ -143,10 +167,10 @@ export default function ConsoleTab({ isActive }) {
       setSessions((current) => [...current, {
         key,
         id: null,
-        name: defaultSessionName(params),
-        kind: params.kind,
+        name: defaultSessionName(safeParams),
+        kind: safeParams.kind,
         localEcho: Boolean(options.localEcho),
-        params,
+        params: safeParams,
         options,
         canReconnect: false,
         state: 'connecting',
@@ -190,10 +214,13 @@ export default function ConsoleTab({ isActive }) {
         writeToTerminal(key, (terminal) => terminal.writeln('\x1b[2mSerial consoles may stay quiet until Enter is pressed. Sending CR…\x1b[0m'));
         await invoke('console_send', { sessionId, b64: bytesToBase64(encoder.encode('\r')) });
       }
+      pendingConnectRef.current = null;
     } catch (error) {
       if (hostKeyRef.current?.sessionKey === key) {
+        // The retry after trusting the key still needs this record.
         setHostKey(hostKeyRef.current);
       } else {
+        pendingConnectRef.current = null;
         const message = String(error);
         const reconnectable = canReconnectAfterError(message);
         updateSession(key, {
@@ -212,12 +239,23 @@ export default function ConsoleTab({ isActive }) {
   const reconnect = useCallback((key) => {
     const session = sessionsRef.current.find((candidate) => candidate.key === key);
     if (!session?.canReconnect || !session.params) return;
-    connect(session.params, session.options ?? {}, key);
-  }, [connect]);
+    const secret = secretsRef.current.get(key);
+    if (needsForgottenSecret(session.params, secret)) {
+      updateSession(key, {
+        canReconnect: false,
+        status: { level: 'degraded', message: 'Credentials were cleared. Reconnect from the connection form.' },
+      });
+      return;
+    }
+    connect(withSecret(session.params, secret), session.options ?? {}, key);
+  }, [connect, updateSession]);
 
   const disconnect = useCallback(async (key) => {
     const session = sessionsRef.current.find((candidate) => candidate.key === key);
     if (!session?.id) return;
+    // A deliberate disconnect ends the session, so its credentials are no
+    // longer needed; a later reconnect goes back through the form.
+    secretsRef.current.delete(key);
     updateSession(key, {
       id: null,
       state: 'disconnected',
@@ -245,6 +283,7 @@ export default function ConsoleTab({ isActive }) {
     }
     terminalRefs.current.delete(key);
     queuedEvents.current.delete(key);
+    secretsRef.current.delete(key);
     setSessions((current) => current.filter((candidate) => candidate.key !== key));
     if (snapshot.length === 1) setConnectFormCollapsed(false);
     setActiveKey((currentActive) => {
@@ -300,7 +339,11 @@ export default function ConsoleTab({ isActive }) {
       });
       hostKeyRef.current = null;
       setHostKey(null);
-      await connect(pending.params, pending.options, pending.key);
+      await connect(
+        withSecret(pending.params, secretsRef.current.get(pending.key)),
+        pending.options,
+        pending.key,
+      );
     } catch (error) {
       updateSession(pending.key, { status: { level: 'down', message: String(error) } });
     } finally {
@@ -311,7 +354,9 @@ export default function ConsoleTab({ isActive }) {
   const cancelHostKey = () => {
     const key = hostKeyRef.current?.sessionKey;
     hostKeyRef.current = null;
+    pendingConnectRef.current = null;
     setHostKey(null);
+    if (key) secretsRef.current.delete(key);
     if (key) updateSession(key, {
       state: 'closed',
       canReconnect: false,

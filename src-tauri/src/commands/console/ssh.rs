@@ -308,11 +308,14 @@ pub async fn connect(
             if password.is_empty() {
                 return Err("SSH password must not be empty.".into());
             }
-            let result = tokio::time::timeout(
-                AUTH_TIMEOUT,
-                session.authenticate_password(username, password.clone()),
-            )
-            .await;
+            // `authenticate_password` takes ownership, so hand it the buffer we
+            // already hold instead of cloning. russh frees its copy without
+            // scrubbing it — which its API gives no way to change — but moving
+            // at least avoids leaving a second copy behind here.
+            let borrowed = std::mem::take(&mut password);
+            let result =
+                tokio::time::timeout(AUTH_TIMEOUT, session.authenticate_password(username, borrowed))
+                    .await;
             password.zeroize();
             result
                 .map_err(|_| "SSH authentication timed out.".to_string())?
