@@ -99,6 +99,63 @@ jobs:
 
             > **macOS note:** Builds are unsigned. Right-click → Open on first launch to bypass Gatekeeper.
             > **Linux note:** Make the AppImage executable before running: `chmod +x NetPulse_*.AppImage`
+
+            ---
+
+            ### Verifying your download
+
+            `SHA256SUMS.txt` lists the SHA-256 of every file in this release, and is uploaded once all
+            three platforms have finished — it may appear a few minutes after the installers.
+
+            - **Windows:** `Get-FileHash .\NetPulse_*_x64-setup.exe -Algorithm SHA256`
+            - **Linux / macOS:** `sha256sum --ignore-missing -c SHA256SUMS.txt`
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  # ── Checksums ──────────────────────────────────────────────────────────────
+  # A separate job so the manifest covers every platform's bundles, rather than
+  # whichever build happened to finish first. Runs even if one platform failed,
+  # matching fail-fast: false — a partial release still deserves checksums.
+  checksums:
+    needs: publish-tauri
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: write   # Required to upload the manifest to the release
+
+    steps:
+      - name: Download the published release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p release-assets
+          gh release download "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --dir release-assets \
+            --clobber
+          # A re-run would otherwise checksum the previous manifest.
+          rm -f release-assets/SHA256SUMS.txt
+
+      - name: Generate SHA256SUMS.txt
+        working-directory: release-assets
+        run: |
+          if [ -z "$(ls -A)" ]; then
+            echo "::error::No assets found on ${{ github.ref_name }}; nothing to checksum."
+            exit 1
+          fi
+          # Written outside the directory: redirecting into it would create the
+          # file before the glob expands, and the manifest would list itself.
+          sha256sum * > "$GITHUB_WORKSPACE/SHA256SUMS.txt"
+          cat "$GITHUB_WORKSPACE/SHA256SUMS.txt"
+
+      - name: Upload the checksum manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            "$GITHUB_WORKSPACE/SHA256SUMS.txt" \
+            --repo "${{ github.repository }}" \
+            --clobber
