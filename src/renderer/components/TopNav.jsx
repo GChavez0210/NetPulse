@@ -6,6 +6,7 @@ const TABS = [
   { id: 'packetloss', label: 'Flood Test' },
   { id: 'diagnostics', label: 'Diagnostics' },
   { id: 'recon', label: 'Recon' },
+  { id: 'console', label: 'Console' },
 ];
 
 export default function TopNav({

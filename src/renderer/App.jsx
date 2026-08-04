@@ -9,6 +9,7 @@ import TraceTab from './features/trace/TraceTab';
 import FloodTestTab from './features/flood/FloodTestTab';
 import DiagnosticsTab from './features/diagnostics/DiagnosticsTab';
 import ReconTab from './features/recon/ReconTab';
+import ConsoleTab from './features/console/ConsoleTab';
 
 function App() {
   const [activeTab, setActiveTab] = useState('ping');
@@ -112,6 +113,11 @@ function App() {
           <div className={activeTab !== 'recon' ? 'tab-hidden' : undefined}>
             <ErrorBoundary label="Recon">
               <ReconTab />
+            </ErrorBoundary>
+          </div>
+          <div className={activeTab !== 'console' ? 'tab-hidden' : 'console-tab-shell'}>
+            <ErrorBoundary label="Console">
+              <ConsoleTab isActive={activeTab === 'console'} />
             </ErrorBoundary>
           </div>
 

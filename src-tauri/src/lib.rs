@@ -1,6 +1,6 @@
 mod commands;
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::Arc;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
@@ -24,6 +24,10 @@ pub struct AppState {
     /// Shared reqwest client reused by simple single-shot HTTP callers
     /// (GeoIP, RDAP) instead of paying connection-pool/TLS setup per call.
     pub http_client: reqwest::Client,
+    /// Long-lived interactive console sessions, keyed for future multi-session UI.
+    pub console_sessions: commands::console::ConsoleSessions,
+    /// Monotonic source for stable session IDs without an extra UUID dependency.
+    pub console_next_session_id: AtomicU64,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -43,6 +47,8 @@ pub fn run() {
             last_whois_ms: Arc::new(tokio::sync::Mutex::new(0)),
             dns_resolvers: Arc::new(tokio::sync::OnceCell::new()),
             http_client: reqwest::Client::new(),
+            console_sessions: Arc::new(tokio::sync::Mutex::new(std::collections::HashMap::new())),
+            console_next_session_id: AtomicU64::new(1),
         })
         .setup(|app| {
             // Open the OUI SQLite database once at startup and keep it in AppState.
@@ -147,6 +153,12 @@ pub fn run() {
             commands::recon::http_headers,
             commands::recon::subdomains_lookup,
             commands::recon::tech_detect,
+            commands::console::console_send,
+            commands::console::console_resize,
+            commands::console::console_disconnect,
+            commands::console::console_connect,
+            commands::console::console_known_hosts_trust,
+            commands::console::serial_list_ports,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

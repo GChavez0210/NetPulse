@@ -1,5 +1,6 @@
 pub mod asn;
 pub mod bgp;
+pub mod console;
 pub mod dns;
 pub mod dnsbl;
 pub mod flood;
