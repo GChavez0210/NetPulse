@@ -233,10 +233,13 @@ async fn run_session<T, F>(
             result = transport.read(&mut read_buffer) => {
                 match result {
                     Ok(0) => {
-                        // A clean end-of-stream is a normal logout, not a fault.
+                        // An idle timeout and a typed `exit` both arrive as a
+                        // clean end-of-stream — SSH gives nothing to tell them
+                        // apart — so every remote close offers a reconnect. Only
+                        // a disconnect the user asked for ends a session for good.
                         send_event(ConsoleEvent::Closed {
                             reason: "The remote console closed the connection.".into(),
-                            recoverable: false,
+                            recoverable: true,
                         });
                         break;
                     }
@@ -400,6 +403,7 @@ pub async fn console_known_hosts_trust(
     russh::keys::known_hosts::learn_known_hosts_path(host.trim(), port, &key, path)
         .map_err(|error| format!("Could not save the SSH host key: {error}"))
 }
+
 
 async fn session_sender(
     sessions: &ConsoleSessions,
@@ -667,7 +671,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_clean_remote_logout_is_not_offered_as_recoverable() {
+    async fn a_remote_close_is_offered_as_recoverable() {
         let sessions = Arc::new(Mutex::new(HashMap::new()));
         let events = Arc::new(StdMutex::new(Vec::new()));
         let captured = events.clone();
@@ -700,7 +704,10 @@ mod tests {
         let ConsoleEvent::Closed { recoverable, .. } = &events.lock().unwrap()[0] else {
             panic!("expected a closed event");
         };
-        assert!(!recoverable, "end-of-stream is a logout, not a fault");
+        assert!(
+            recoverable,
+            "an idle timeout reaches us as end-of-stream, so it must offer a reconnect"
+        );
     }
 
     #[tokio::test]

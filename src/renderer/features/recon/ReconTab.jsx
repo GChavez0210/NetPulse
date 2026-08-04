@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { runOnEnter } from '../trace/TraceTab';
-import { buildWhoisPresentation, parseIntOrDefault } from '../../utils/networkUtils';
+import { buildWhoisPresentation } from '../../utils/networkUtils';
+import { exportStatusMessage, saveTextFile } from '../../utils/exportFile';
 import ClearButton from '../../components/ClearButton';
 
 export default function ReconTab() {
   // SSL / TLS
   const [sslHost, setSslHost] = useState('');
-  const [sslPort, setSslPort] = useState(443);
+  const [sslPort, setSslPort] = useState('443');
   const [sslLoading, setSslLoading] = useState(false);
   const [sslResult, setSslResult] = useState(null);
 
@@ -68,11 +69,18 @@ export default function ReconTab() {
   const handleSslInspect = async () => {
     const host = sslHost.trim();
     if (!host) { setStatus('Enter a hostname or IP.'); return; }
+    // The port field is plain text, so its range is checked here rather than
+    // being snapped back to 443 mid-keystroke.
+    const port = Number(sslPort);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      setStatus('Port must be a number between 1 and 65535.');
+      return;
+    }
     setSslLoading(true);
     setSslResult(null);
-    setStatus(`Inspecting TLS certificate for ${host}:${sslPort}...`);
+    setStatus(`Inspecting TLS certificate for ${host}:${port}...`);
     try {
-      const res = await invoke('ssl_inspect', { host, port: sslPort });
+      const res = await invoke('ssl_inspect', { host, port });
       setSslResult(res);
       setStatus(res.ok ? `Certificate inspection complete for ${host}.` : `SSL error: ${res.error}`);
     } catch (e) {
@@ -245,7 +253,7 @@ export default function ReconTab() {
 
   const resetSsl = () => {
     setSslHost('');
-    setSslPort(443);
+    setSslPort('443');
     setSslResult(null);
     setStatus('SSL / TLS Inspector cleared.');
   };
@@ -278,18 +286,11 @@ export default function ReconTab() {
     }
   };
 
-  const handleExportWhoisTxt = () => {
+  const handleExportWhoisTxt = async () => {
     if (!whoisData) return;
-    const blob = new Blob([whoisPresentation.text], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `whois-${whoisPresentation.queryDomain || 'lookup'}-${Date.now()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    setStatus('WHOIS TXT exported.');
+    const fileName = `whois-${whoisPresentation.queryDomain || 'lookup'}-${Date.now()}.txt`;
+    const result = await saveTextFile(fileName, whoisPresentation.text);
+    setStatus(exportStatusMessage(result, 'WHOIS TXT'));
   };
 
   // ── Render helpers ─────────────────────────────────────────────────────────
@@ -512,7 +513,7 @@ export default function ReconTab() {
             <h3>SSL / TLS Inspector</h3>
             <ClearButton
               onClear={resetSsl}
-              disabled={sslLoading || (!sslHost && sslPort === 443 && !sslResult)}
+              disabled={sslLoading || (!sslHost && sslPort === '443' && !sslResult)}
               title="Clear SSL / TLS Inspector"
             />
           </div>
@@ -527,11 +528,12 @@ export default function ReconTab() {
               placeholder="hostname or IP"
             />
             <input
-              type="number"
-              min="1"
-              max="65535"
+              type="text"
+              inputMode="numeric"
+              maxLength={5}
               value={sslPort}
-              onChange={(e) => setSslPort(parseIntOrDefault(e.target.value, 443, 1, 65535))}
+              onChange={(e) => setSslPort(e.target.value.replace(/\D/g, '').slice(0, 5))}
+              onKeyDown={(e) => runOnEnter(e, handleSslInspect)}
               placeholder="443"
               style={{ width: 80, flex: '0 0 80px' }}
             />

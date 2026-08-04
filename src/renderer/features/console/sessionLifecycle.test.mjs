@@ -2,11 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canReconnectAfterError,
+  countLiveSessions,
   defaultSessionName,
   needsForgottenSecret,
   splitSecret,
   withSecret,
 } from './sessionLifecycle.mjs';
+
+test('counts only the sessions actually holding a transport', () => {
+  const sessions = [
+    { state: 'connected' },
+    { state: 'connecting' },
+    { state: 'interrupted' },
+    { state: 'disconnected' },
+    { state: 'closed' },
+    { state: 'awaitingTrust' },
+  ];
+  assert.equal(countLiveSessions(sessions), 2);
+  assert.equal(countLiveSessions([]), 0);
+});
 
 test('uses the host or physical port as the initial tab name', () => {
   assert.equal(defaultSessionName({ kind: 'ssh', host: '10.0.0.12' }), '10.0.0.12');

@@ -158,6 +158,7 @@ pub fn run() {
             commands::console::console_disconnect,
             commands::console::console_connect,
             commands::console::console_known_hosts_trust,
+            commands::export::export_text_file,
             commands::console::serial_list_ports,
         ])
         .run(tauri::generate_context!())

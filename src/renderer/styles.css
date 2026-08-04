@@ -2155,7 +2155,8 @@ button.console-reconnect-button:hover:not(:disabled) {
   height: 100%;
 }
 
-.console-host-key-overlay {
+.console-host-key-overlay,
+.console-confirm-overlay {
   position: fixed;
   inset: 0;
   z-index: 300;
@@ -2166,7 +2167,8 @@ button.console-reconnect-button:hover:not(:disabled) {
   backdrop-filter: blur(3px);
 }
 
-.console-host-key-dialog {
+.console-host-key-dialog,
+.console-confirm-dialog {
   width: min(560px, 100%);
   padding: 22px;
   border: 1px solid var(--color-warning);
@@ -2175,13 +2177,15 @@ button.console-reconnect-button:hover:not(:disabled) {
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
 }
 
-.console-host-key-dialog h2 {
+.console-host-key-dialog h2,
+.console-confirm-dialog h2 {
   margin: 10px 0 8px;
   color: var(--color-text-primary);
   font-size: 1.05rem;
 }
 
-.console-host-key-dialog p {
+.console-host-key-dialog p,
+.console-confirm-dialog p {
   color: var(--color-text-secondary);
   font-size: 0.8rem;
   line-height: 1.5;
@@ -2216,15 +2220,42 @@ button.console-reconnect-button:hover:not(:disabled) {
   overflow-wrap: anywhere;
 }
 
-.console-host-key-note {
+.console-host-key-note,
+.console-confirm-note {
   color: var(--color-warning) !important;
 }
 
-.console-host-key-actions {
+.console-host-key-actions,
+.console-confirm-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   margin-top: 18px;
+}
+
+.console-export-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 8px 8px;
+  overflow-wrap: anywhere;
+}
+
+button.console-export-toast-dismiss {
+  flex: 0 0 auto;
+  min-height: 0;
+  margin-left: auto;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+button.console-export-toast-dismiss:hover {
+  background: transparent;
+  color: var(--color-text-primary);
 }
 
 @media (max-width: 820px) {

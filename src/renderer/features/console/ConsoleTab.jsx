@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Channel, invoke } from '@tauri-apps/api/core';
+import CloseSessionPrompt from './CloseSessionPrompt';
 import ConnectForm from './ConnectForm';
 import HostKeyPrompt from './HostKeyPrompt';
 import SessionTabs from './SessionTabs';
 import TerminalPane from './TerminalPane';
 import {
+  MAX_CONSOLE_SESSIONS,
   canReconnectAfterError,
+  countLiveSessions,
   defaultSessionName,
   needsForgottenSecret,
   splitSecret,
@@ -48,7 +51,10 @@ export default function ConsoleTab({ isActive }) {
   const [formStatus, setFormStatus] = useState({ level: 'idle', message: 'Ready for a new connection' });
   const [hostKey, setHostKey] = useState(null);
   const [trustingKey, setTrustingKey] = useState(false);
+  const [pendingClose, setPendingClose] = useState(null);
+  const [closingSession, setClosingSession] = useState(false);
   const sessionsRef = useRef([]);
+  const activeKeyRef = useRef(null);
   const terminalRefs = useRef(new Map());
   const queuedEvents = useRef(new Map());
   const nextClientKey = useRef(1);
@@ -61,6 +67,10 @@ export default function ConsoleTab({ isActive }) {
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
+
+  useEffect(() => {
+    activeKeyRef.current = activeKey;
+  }, [activeKey]);
 
   useEffect(() => {
     const secrets = secretsRef.current;
@@ -121,8 +131,8 @@ export default function ConsoleTab({ isActive }) {
       return;
     }
     if (event.type === 'closed') {
-      // A clean logout is not a fault and is not worth offering a reconnect
-      // for; the backend distinguishes it from a connection that dropped.
+      // Every close the user did not ask for is recoverable, so the credentials
+      // are kept for the reconnect. A deliberate disconnect drops them instead.
       const recoverable = Boolean(event.recoverable);
       if (!recoverable) secretsRef.current.delete(key);
       updateSession(key, {
@@ -131,9 +141,16 @@ export default function ConsoleTab({ isActive }) {
         canReconnect: recoverable,
         status: { level: recoverable ? 'down' : 'idle', message: event.reason },
       });
-      writeToTerminal(key, (terminal) => terminal.writeln(
-        recoverable ? `\r\n\x1b[31m${event.reason}\x1b[0m` : `\r\n\x1b[2m${event.reason}\x1b[0m`,
-      ));
+      writeToTerminal(key, (terminal) => {
+        terminal.writeln(recoverable ? `\r\n\x1b[31m${event.reason}\x1b[0m` : `\r\n\x1b[2m${event.reason}\x1b[0m`);
+        if (recoverable) {
+          terminal.writeln('\x1b[2mPress R to reconnect.\x1b[0m');
+          // R only reaches the pane that holds focus, which after an unwatched
+          // drop it may not. A background tab is left alone — it takes focus
+          // when it is selected.
+          if (activeKeyRef.current === key) terminal.focus();
+        }
+      });
     }
   }, [updateSession, writeToTerminal]);
 
@@ -229,7 +246,13 @@ export default function ConsoleTab({ isActive }) {
           canReconnect: reconnectable,
           status: { level: 'down', message },
         });
-        writeToTerminal(key, (terminal) => terminal.writeln(`\r\n\x1b[31m${message}\x1b[0m`));
+        writeToTerminal(key, (terminal) => {
+          terminal.writeln(`\r\n\x1b[31m${message}\x1b[0m`);
+          if (reconnectable) {
+            terminal.writeln('\x1b[2mPress R to reconnect.\x1b[0m');
+            if (activeKeyRef.current === key) terminal.focus();
+          }
+        });
       }
     } finally {
       setConnecting(false);
@@ -241,20 +264,21 @@ export default function ConsoleTab({ isActive }) {
     if (!session?.canReconnect || !session.params) return;
     const secret = secretsRef.current.get(key);
     if (needsForgottenSecret(session.params, secret)) {
-      updateSession(key, {
-        canReconnect: false,
-        status: { level: 'degraded', message: 'Credentials were cleared. Reconnect from the connection form.' },
-      });
+      const message = 'Credentials were cleared. Reconnect from the connection form.';
+      updateSession(key, { canReconnect: false, status: { level: 'degraded', message } });
+      // Said in the terminal too, since that is where the reconnect hint was.
+      writeToTerminal(key, (terminal) => terminal.writeln(`\x1b[33m${message}\x1b[0m`));
       return;
     }
     connect(withSecret(session.params, secret), session.options ?? {}, key);
-  }, [connect, updateSession]);
+  }, [connect, updateSession, writeToTerminal]);
 
   const disconnect = useCallback(async (key) => {
     const session = sessionsRef.current.find((candidate) => candidate.key === key);
     if (!session?.id) return;
     // A deliberate disconnect ends the session, so its credentials are no
-    // longer needed; a later reconnect goes back through the form.
+    // longer needed; a later reconnect goes back through the form. The tab and
+    // its scrollback stay, so the transcript is still there to export.
     secretsRef.current.delete(key);
     updateSession(key, {
       id: null,
@@ -275,6 +299,8 @@ export default function ConsoleTab({ isActive }) {
     const session = snapshot.find((candidate) => candidate.key === key);
     if (!session || session.state === 'connecting') return;
     if (session.id) {
+      // Closing a live tab is the only way to end a session, so the transport
+      // is closed politely here rather than left for the backend to time out.
       try {
         await invoke('console_disconnect', { sessionId: session.id });
       } catch {
@@ -292,6 +318,43 @@ export default function ConsoleTab({ isActive }) {
       return snapshot[index + 1]?.key ?? snapshot[index - 1]?.key ?? null;
     });
   }, []);
+
+  const activateSession = useCallback((key) => {
+    setActiveKey(key);
+    // The pane is display:none until this update commits, and a hidden element
+    // cannot take focus, so the terminal is focused once it is on screen.
+    window.setTimeout(() => terminalRefs.current.get(key)?.focus(), 0);
+  }, []);
+
+  const requestClose = useCallback((key) => {
+    const session = sessionsRef.current.find((candidate) => candidate.key === key);
+    if (!session || session.state === 'connecting') return;
+    // Only a live session is worth confirming; a closed tab holds nothing but
+    // its scrollback, which Export has already had every chance to capture.
+    if (!session.id) {
+      closeSession(key);
+      return;
+    }
+    setPendingClose({ key, name: session.name, kind: session.kind });
+  }, [closeSession]);
+
+  const confirmClose = useCallback(async () => {
+    const key = pendingClose?.key;
+    if (!key) return;
+    setClosingSession(true);
+    try {
+      await closeSession(key);
+    } finally {
+      setClosingSession(false);
+      setPendingClose(null);
+    }
+  }, [closeSession, pendingClose]);
+
+  const exportPendingTranscript = useCallback(() => {
+    if (pendingClose) terminalRefs.current.get(pendingClose.key)?.exportTranscript();
+  }, [pendingClose]);
+
+  const cancelClose = useCallback(() => setPendingClose(null), []);
 
   const sendInput = useCallback(async (key, data) => {
     const session = sessionsRef.current.find((candidate) => candidate.key === key);
@@ -369,9 +432,7 @@ export default function ConsoleTab({ isActive }) {
     [activeKey, sessions],
   );
   const displayedStatus = activeSession?.status ?? formStatus;
-  const sessionLimitReached = sessions.filter((session) => (
-    session.state === 'connected' || session.state === 'connecting'
-  )).length >= 16;
+  const sessionLimitReached = countLiveSessions(sessions) >= MAX_CONSOLE_SESSIONS;
 
   return (
     <section className="console-page">
@@ -403,11 +464,11 @@ export default function ConsoleTab({ isActive }) {
         <SessionTabs
           sessions={sessions}
           activeKey={activeKey}
-          onActivate={setActiveKey}
+          onActivate={activateSession}
           onRename={(key, name) => updateSession(key, { name })}
           onDisconnect={disconnect}
           onReconnect={reconnect}
-          onClose={closeSession}
+          onClose={requestClose}
         />
       )}
 
@@ -428,11 +489,20 @@ export default function ConsoleTab({ isActive }) {
               onInput={(data) => sendInput(session.key, data)}
               onResize={resize}
               localEcho={session.localEcho}
+              canReconnect={session.canReconnect}
+              onReconnectKey={() => reconnect(session.key)}
             />
           </div>
         ))}
       </div>
       <HostKeyPrompt hostKey={hostKey} busy={trustingKey} onTrust={trustHostKey} onCancel={cancelHostKey} />
+      <CloseSessionPrompt
+        session={pendingClose}
+        busy={closingSession}
+        onExport={exportPendingTranscript}
+        onConfirm={confirmClose}
+        onCancel={cancelClose}
+      />
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import React, {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -10,6 +11,7 @@ import { FitAddon } from '@xterm/addon-fit';
 import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
+import { exportStatusMessage, saveTextFile } from '../../utils/exportFile';
 
 function terminalText(terminal) {
   const buffer = terminal.buffer.active;
@@ -37,18 +39,51 @@ const TerminalPane = forwardRef(function TerminalPane({
   onInput,
   onResize,
   localEcho = false,
+  canReconnect = false,
+  onReconnectKey,
 }, ref) {
   const hostRef = useRef(null);
   const terminalRef = useRef(null);
   const fitAddonRef = useRef(null);
   const searchAddonRef = useRef(null);
-  const callbacksRef = useRef({ onInput, onResize, localEcho, sessionId });
+  const callbacksRef = useRef({
+    onInput, onResize, localEcho, sessionId, sessionName, canReconnect, onReconnectKey,
+  });
+  const exportNoticeTimer = useRef(0);
   const [search, setSearch] = useState('');
   const [toolbarMessage, setToolbarMessage] = useState('');
+  const [exportNotice, setExportNotice] = useState('');
+
+  useEffect(() => () => window.clearTimeout(exportNoticeTimer.current), []);
 
   useEffect(() => {
-    callbacksRef.current = { onInput, onResize, localEcho, sessionId };
-  }, [localEcho, onInput, onResize, sessionId]);
+    callbacksRef.current = {
+      onInput, onResize, localEcho, sessionId, sessionName, canReconnect, onReconnectKey,
+    };
+  }, [canReconnect, localEcho, onInput, onReconnectKey, onResize, sessionId, sessionName]);
+
+  const announceExport = useCallback((message) => {
+    setExportNotice(message);
+    window.clearTimeout(exportNoticeTimer.current);
+    exportNoticeTimer.current = window.setTimeout(() => setExportNotice(''), 12_000);
+  }, []);
+
+  // Reads the session name from the ref so the handle can stay identity-stable
+  // while still picking up a tab that was renamed after mount.
+  const exportTranscript = useCallback(async () => {
+    const terminal = terminalRef.current;
+    const text = terminal ? terminalText(terminal) : '';
+    if (!text) {
+      announceExport('Nothing to export yet — this session has produced no output.');
+      return false;
+    }
+    const safeName = callbacksRef.current.sessionName.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'console';
+    const fileName = `netpulse-${safeName}-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
+
+    const result = await saveTextFile(fileName, `${text}\n`);
+    announceExport(exportStatusMessage(result, 'Transcript'));
+    return result.ok;
+  }, [announceExport]);
 
   useImperativeHandle(ref, () => ({
     getSize() {
@@ -67,7 +102,8 @@ const TerminalPane = forwardRef(function TerminalPane({
     focus() {
       terminalRef.current?.focus();
     },
-  }), []);
+    exportTranscript,
+  }), [exportTranscript]);
 
   useEffect(() => {
     if (!hostRef.current) return undefined;
@@ -94,6 +130,17 @@ const TerminalPane = forwardRef(function TerminalPane({
     terminal.loadAddon(new WebLinksAddon());
     terminal.open(hostRef.current);
     terminal.writeln('\x1b[2mNetPulse Console — configure a transport to begin.\x1b[0m');
+    // Runs ahead of the `disableStdin` gate, which is what makes R safe to
+    // claim: a session that can be reconnected has no transport to type into.
+    terminal.attachCustomKeyEventHandler((event) => {
+      const current = callbacksRef.current;
+      if (event.type !== 'keydown' || !current.canReconnect) return true;
+      if (event.ctrlKey || event.altKey || event.metaKey) return true;
+      if (event.key !== 'r' && event.key !== 'R') return true;
+      event.preventDefault();
+      current.onReconnectKey?.();
+      return false;
+    });
     const inputSubscription = terminal.onData((data) => {
       const current = callbacksRef.current;
       if (!current.sessionId) return;
@@ -158,32 +205,6 @@ const TerminalPane = forwardRef(function TerminalPane({
     setToolbarMessage(found ? '' : 'No match');
   };
 
-  const copySelection = async () => {
-    const selection = terminalRef.current?.getSelection();
-    if (!selection) {
-      setToolbarMessage('Select terminal text first');
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(selection);
-      setToolbarMessage('Copied');
-    } catch {
-      setToolbarMessage('Clipboard access was denied');
-    }
-  };
-
-  const exportText = () => {
-    const text = terminalRef.current ? terminalText(terminalRef.current) : '';
-    const url = URL.createObjectURL(new Blob([text, '\n'], { type: 'text/plain;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    const safeName = sessionName.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'console';
-    link.download = `netpulse-${safeName}-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setToolbarMessage('Exported');
-  };
-
   return (
     <div className="console-terminal-card" aria-label="Interactive terminal">
       <div className="console-terminal-toolbar">
@@ -203,13 +224,32 @@ const TerminalPane = forwardRef(function TerminalPane({
           />
           <button type="button" className="secondary" onClick={() => find('previous')} aria-label="Previous match">↑</button>
           <button type="button" className="secondary" onClick={() => find('next')} aria-label="Next match">↓</button>
-          <button type="button" className="secondary" onClick={copySelection}>Copy</button>
-          <button type="button" className="secondary" onClick={() => terminalRef.current?.clear()}>Clear</button>
-          <button type="button" className="secondary" onClick={exportText}>Export</button>
+          <button
+            type="button"
+            className="secondary"
+            title="Discards scrollback, including anything Export has not already captured"
+            onClick={() => terminalRef.current?.clear()}
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            title="Save this session's output, scrollback included, as a text file"
+            onClick={exportTranscript}
+          >
+            Export
+          </button>
           {toolbarMessage && <span className="console-toolbar-message" role="status">{toolbarMessage}</span>}
         </div>
       </div>
       <div className="console-terminal-host" ref={hostRef} />
+      {exportNotice && (
+        <div className="status-toast console-export-toast" role="status">
+          {exportNotice}
+          <button type="button" className="console-export-toast-dismiss" aria-label="Dismiss" onClick={() => setExportNotice('')}>×</button>
+        </div>
+      )}
     </div>
   );
 });

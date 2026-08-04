@@ -76,6 +76,16 @@ export default function ConnectForm({
     event.preventDefault();
     if (formDisabled) return;
 
+    // The port field is plain text now, so the range it used to get from the
+    // number input's min/max is checked here instead.
+    if (transport !== 'serial') {
+      const port = Number(transport === 'ssh' ? sshPort : telnetPort);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        onFormMessage?.('TCP port must be a number between 1 and 65535.');
+        return;
+      }
+    }
+
     if (transport === 'ssh') {
       const auth = authMode === 'password'
         ? { mode: 'password', password }
@@ -167,11 +177,17 @@ export default function ConnectForm({
               </Field>
               <Field label="TCP port">
                 <input
-                  type="number"
-                  min="1"
-                  max="65535"
+                  type="text"
+                  inputMode="numeric"
+                  // A spinner earns its space on a value you step through. Nobody
+                  // walks from 22 to 2001; they type the port they were given.
+                  maxLength={5}
                   value={transport === 'ssh' ? sshPort : telnetPort}
-                  onChange={(event) => (transport === 'ssh' ? setSshPort(event.target.value) : setTelnetPort(event.target.value))}
+                  onChange={(event) => {
+                    const digits = event.target.value.replace(/\D/g, '').slice(0, 5);
+                    if (transport === 'ssh') setSshPort(digits);
+                    else setTelnetPort(digits);
+                  }}
                   required
                 />
               </Field>
@@ -188,7 +204,7 @@ export default function ConnectForm({
                   </Field>
                   {authMode === 'password' ? (
                     <Field label="Password">
-                      <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" placeholder="Never saved" />
+                      <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" placeholder="never saved" />
                     </Field>
                   ) : (
                     <>

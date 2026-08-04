@@ -1,4 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { MAX_CONSOLE_SESSIONS, countLiveSessions } from './sessionLifecycle.mjs';
+
+// How close to the cap the count has to get before it is worth naming the cap.
+const CROWDED_SESSIONS = MAX_CONSOLE_SESSIONS - 4;
 
 export default function SessionTabs({
   sessions,
@@ -12,6 +16,7 @@ export default function SessionTabs({
   const [editingKey, setEditingKey] = useState(null);
   const [draftName, setDraftName] = useState('');
   const editRef = useRef(null);
+  const liveCount = countLiveSessions(sessions);
 
   useEffect(() => {
     if (editingKey) {
@@ -79,7 +84,9 @@ export default function SessionTabs({
               type="button"
               className="console-session-icon close"
               aria-label={`Close ${session.name}`}
-              title={session.state === 'connecting' ? 'Wait for the connection attempt to finish' : 'Close tab'}
+              title={session.state === 'connecting'
+                ? 'Wait for the connection attempt to finish'
+                : 'Close tab — a live session is disconnected first'}
               disabled={session.state === 'connecting'}
               onClick={() => onClose(session.key)}
             >
@@ -90,8 +97,10 @@ export default function SessionTabs({
       </div>
       <div className="console-session-actions">
         <span>
-          {sessions.filter((session) => session.state === 'connected' || session.state === 'connecting').length} / 16 live
-          {' · '}{sessions.length} tabs
+          {liveCount >= CROWDED_SESSIONS
+            ? `${liveCount} / ${MAX_CONSOLE_SESSIONS} live`
+            : `${liveCount} live`}
+          {' · '}{sessions.length} {sessions.length === 1 ? 'tab' : 'tabs'}
         </span>
         {sessions.find((session) => session.key === activeKey)?.canReconnect && (
           <button type="button" className="console-reconnect-button" onClick={() => onReconnect(activeKey)}>

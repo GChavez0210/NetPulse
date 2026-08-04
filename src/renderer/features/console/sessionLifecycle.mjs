@@ -1,3 +1,13 @@
+/** Mirrors MAX_CONSOLE_SESSIONS in the backend, which rejects the next connect. */
+export const MAX_CONSOLE_SESSIONS = 16;
+
+/** Sessions holding a transport. A disconnected tab costs nothing but scrollback. */
+export function countLiveSessions(sessions) {
+  return sessions.filter((session) => (
+    session.state === 'connected' || session.state === 'connecting'
+  )).length;
+}
+
 export function defaultSessionName(params) {
   return params.kind === 'serial' ? params.port : params.host;
 }

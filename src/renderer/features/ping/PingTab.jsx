@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { runOnEnter } from '../trace/TraceTab';
+import { exportStatusMessage, saveTextFile } from '../../utils/exportFile';
 import PingCard from './PingCard';
 import FavoritesPanel from './FavoritesPanel';
 import {
@@ -381,7 +382,7 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
     setStatus('All tests stopped.');
   };
 
-  const exportSession = () => {
+  const exportSession = async () => {
     const rows = tests.map((t) => {
       const m = getTestMetrics(t);
       const loss = t.sent > 0 ? ((t.sent - t.received) / t.sent * 100).toFixed(2) : '0.00';
@@ -401,13 +402,8 @@ export default function PingTab({ addNotification, settings, saveSettings }) {
       'Alias,Host,Avg RTT (ms),Max RTT (ms),Loss %,Status,Reply TTL,TTL Changes',
       ...rows,
     ].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `netpulse-session-${Date.now()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const result = await saveTextFile(`netpulse-session-${Date.now()}.csv`, csv, 'text/csv');
+    setStatus(exportStatusMessage(result, `Session CSV (${rows.length} targets)`));
   };
 
   const saveFavoriteGroup = (name) => {

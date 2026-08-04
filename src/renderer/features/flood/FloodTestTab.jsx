@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { exportStatusMessage, saveTextFile } from '../../utils/exportFile';
 import {
   LineChart as ReLineChart,
   Line,
@@ -375,7 +376,7 @@ export default function FloodTestTab({ addNotification }) {
     }
   };
 
-  const handleExportCsv = () => {
+  const handleExportCsv = async () => {
     const { samples, host } = rapidDetails;
     if (samples.length === 0) return;
 
@@ -413,16 +414,9 @@ export default function FloodTestTab({ addNotification }) {
       );
     });
 
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `netpulse-flood-${host || 'test'}-${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    setStatus(`Flood CSV exported — ${samples.length} samples.`);
+    const fileName = `netpulse-flood-${host || 'test'}-${Date.now()}.csv`;
+    const result = await saveTextFile(fileName, rows.join('\n'), 'text/csv;charset=utf-8;');
+    setStatus(exportStatusMessage(result, `Flood CSV (${samples.length} samples)`));
   };
 
   const lossPct = Number(rapidDetails.lossPct || 0);

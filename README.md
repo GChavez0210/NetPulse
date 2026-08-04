@@ -80,7 +80,8 @@ Interactive terminal access to network devices over SSH, Telnet, or a serial con
 - **Telnet** — full option negotiation (ECHO, SUPPRESS-GO-AHEAD, TERMINAL-TYPE, NAWS) and support for non-standard ports used by console servers.
 - **Serial** — port dropdown listing adapters by manufacturer and product (`COM3 — FTDI FT232R USB UART`), defaulting to 9600 8N1, with data bits, parity, stop bits, flow control, and local echo available under advanced settings.
 - Up to 16 concurrent sessions as renameable tabs, each with its own terminal and scrollback, staying live while you work in other NetPulse tabs.
-- Scrollback search, copy, clear, transcript export, and reconnect on a dropped session.
+- Scrollback search, clear, and transcript export — the export reports the exact path it wrote to.
+- A session closed by anything other than you — an idle timeout, a reboot, a dropped link — prints a `Press R to reconnect` hint in the terminal and reconnects without retyping credentials. Closing a live tab warns first and offers to export the transcript.
 - An opt-in **legacy SSH algorithms** toggle for older Cisco and HPE gear, which widens the accepted algorithm set without downgrading connections that do not need it.
 
 Credentials are held in memory only, never written to disk, and discarded as soon as a session can no longer need them.

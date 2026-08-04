@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { exportStatusMessage, saveTextFile } from '../../utils/exportFile';
 
 export const runOnEnter = (event, action) => {
   if (event.key !== 'Enter') return;
@@ -226,7 +227,7 @@ export default function TraceTab({ addNotification }) {
     }
   };
 
-  const handleExportTraceCsv = () => {
+  const handleExportTraceCsv = async () => {
     if (traceHops.length === 0) return;
 
     const escapeCsv = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -274,16 +275,9 @@ export default function TraceTab({ addNotification }) {
       );
     });
 
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `traceroute-${traceHost || 'report'}-${Date.now()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    setStatus('Traceroute CSV exported.');
+    const fileName = `traceroute-${traceHost || 'report'}-${Date.now()}.csv`;
+    const result = await saveTextFile(fileName, rows.join('\n'), 'text/csv;charset=utf-8;');
+    setStatus(exportStatusMessage(result, 'Traceroute CSV'));
   };
 
   return (
