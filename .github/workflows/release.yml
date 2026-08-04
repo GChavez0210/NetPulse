@@ -1,10 +1,18 @@
 name: Release
 
-# Triggers on any tag push matching v* (e.g. v0.5.0, v1.0.0-beta.1)
+# Triggers on any tag push matching v* (e.g. v0.5.0, v1.0.0-beta.1).
+# The manual trigger only regenerates SHA256SUMS.txt for a release that already
+# exists — it does not rebuild or republish anything.
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to regenerate SHA256SUMS.txt for (e.g. v0.6.0)'
+        required: true
+        type: string
 
 # Opt into Node.js 24 for all GitHub Actions runners before the June 2026 forced cutover.
 env:
@@ -12,6 +20,9 @@ env:
 
 jobs:
   publish-tauri:
+    # Skipped on a manual run, which exists only to backfill checksums.
+    if: github.event_name == 'push'
+
     permissions:
       contents: write   # Required to create and upload to GitHub Releases
 
@@ -99,6 +110,9 @@ jobs:
 
             > **macOS note:** Builds are unsigned. Right-click → Open on first launch to bypass Gatekeeper.
             > **Linux note:** Make the AppImage executable before running: `chmod +x NetPulse_*.AppImage`
+            > **Windows note:** Defender may report `Trojan:Win32/Wacatac.B!ml` on the installer. It is a
+            > false positive — see [Windows SmartScreen and Defender](https://github.com/GChavez0210/NetPulse#windows-smartscreen-and-defender)
+            > for why an SSH client provokes it and how to verify what you downloaded.
 
             ---
 
@@ -119,6 +133,9 @@ jobs:
   # matching fail-fast: false — a partial release still deserves checksums.
   checksums:
     needs: publish-tauri
+    # Runs when the build matrix is skipped (manual backfill) as well as when it
+    # finishes, and when one platform failed — a partial release still deserves
+    # checksums. Only a cancelled run stops it.
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -126,13 +143,16 @@ jobs:
     permissions:
       contents: write   # Required to upload the manifest to the release
 
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
     steps:
       - name: Download the published release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p release-assets
-          gh release download "${{ github.ref_name }}" \
+          gh release download "$RELEASE_TAG" \
             --repo "${{ github.repository }}" \
             --dir release-assets \
             --clobber
@@ -143,7 +163,7 @@ jobs:
         working-directory: release-assets
         run: |
           if [ -z "$(ls -A)" ]; then
-            echo "::error::No assets found on ${{ github.ref_name }}; nothing to checksum."
+            echo "::error::No assets found on $RELEASE_TAG; nothing to checksum."
             exit 1
           fi
           # Written outside the directory: redirecting into it would create the
@@ -155,7 +175,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" \
+          gh release upload "$RELEASE_TAG" \
             "$GITHUB_WORKSPACE/SHA256SUMS.txt" \
             --repo "${{ github.repository }}" \
             --clobber

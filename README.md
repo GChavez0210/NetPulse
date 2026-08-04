@@ -42,6 +42,42 @@ https://github.com/GChavez0210/NetPulse/releases
 | macOS Apple Silicon | ✅ |
 | macOS Intel | 🟡 Source Build |
 
+### Verifying a download
+
+Every release includes `SHA256SUMS.txt`, listing the SHA-256 of each file as built by GitHub Actions.
+
+```powershell
+Get-FileHash .\NetPulse_0.6.0_x64-setup.exe -Algorithm SHA256
+```
+
+```bash
+sha256sum --ignore-missing -c SHA256SUMS.txt
+```
+
+### Windows SmartScreen and Defender
+
+NetPulse releases are **not code-signed yet**, and Windows Defender may report the installer as
+`Trojan:Win32/Wacatac.B!ml`, blocking the download.
+
+This is a false positive, and it is worth explaining rather than waving away. The `!ml` suffix means the
+verdict came from a machine-learning model rather than a matched signature, and `Wacatac` is a generic
+bucket, not an identified family. What puts NetPulse in that bucket is the Console tab: a program that
+reads a password, negotiates crypto, opens an outbound encrypted session, and relays an interactive
+shell is behaviorally identical to remote-access malware — that description fits PuTTY just as well. The
+difference is provenance, and an unsigned binary has none to offer. Releases before the Console tab
+existed were not flagged.
+
+What you can do:
+
+- **Verify the download** against `SHA256SUMS.txt` to confirm you have the file CI built.
+- **Read the source** — the console implementation lives in [`src-tauri/src/commands/console/`](src-tauri/src/commands/console/), and every release is built in public by [GitHub Actions](.github/workflows/release.yml) from the tagged commit.
+- **Build it yourself** from source (see below), which sidesteps the question entirely.
+- **Try the `.msi`** instead of the `.exe` — the two are scored differently.
+
+Code signing is planned, and is the only thing that resolves this properly. Until then, please do not
+disable your antivirus or add exclusions on our say-so — that is exactly what a malicious project would
+ask you to do. Verify the hash, or build from source.
+
 ---
 
 ## Screenshots
