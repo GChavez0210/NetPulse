@@ -122,7 +122,7 @@ function App() {
           </div>
 
           <footer className="attribution-footer">
-            NetPulse by Gabriel Chavez &bull; Developed in Mexico with love
+            NetPulse &bull; Developed in Mexico with love
           </footer>
         </div>
       </main>

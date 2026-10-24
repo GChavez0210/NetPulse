@@ -5,6 +5,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and thi
 
 ---
 
+## [0.6.1] — 2026-10-23
+
+### Added
+- **SHA-256 checksums with every release.** The release workflow publishes `SHA256SUMS.txt` alongside the installers, so you can verify a download against the file CI built. Checksums can also be backfilled for an existing release.
+
+### Changed
+- The footer attribution reads `NetPulse — Developed in Mexico with love`.
+
+### Documentation
+- The README explains the Windows Defender false positive that unsigned installers trigger, and how to verify a download instead.
+
+---
+
 ## [0.6.0] — 2026-08-04
 
 A new Console tab — interactive terminal access to network devices over SSH, Telnet, and a serial console cable — and exports across the app that report where they wrote.
