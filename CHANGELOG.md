@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and thi
 
 ---
 
+## [0.6.2] — 2026-10-24
+
+### Changed
+- **The frontend ships as several vendor chunks instead of one bundle.** React, Recharts, xterm, and dnd-kit are split apart, so the WebView no longer parses a single 1.9 MB file before it paints. The largest chunk is now 364 KB.
+
+### Fixed
+- **The production build failed on Windows.** Above 1 MiB of input, esbuild passes source to its Go binary through a file in the temp directory, and the delete of that file raced the antivirus scanner and aborted the build. Keeping every chunk under 1 MiB avoids that path.
+
+---
+
 ## [0.6.1] — 2026-10-23
 
 ### Added

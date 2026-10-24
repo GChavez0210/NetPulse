@@ -3062,7 +3062,7 @@ dependencies = [
 
 [[package]]
 name = "netpulse"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "base64 0.22.1",
  "futures",
